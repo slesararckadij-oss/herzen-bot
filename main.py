@@ -1,29 +1,26 @@
-import asyncio
-import logging
 import os
 import json
-from datetime import datetime, timedelta
-from threading import Thread
-
+import logging
+import threading
+from datetime import datetime
 from flask import Flask, send_from_directory, jsonify, request
+import requests as req
 import pytz
-
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+import asyncio
 
 from parser import HerzenParser
-from scheduler import run_scheduler
 
 # ===== CONFIG =====
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "СЮДА_ВСТАВЬ_ТОКЕН")
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://твой-сайт.onrender.com")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 TZ = pytz.timezone("Europe/Moscow")
 PORT = int(os.environ.get("PORT", 8080))
+API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ===== FLASK =====
-flask_app = Flask(__name__, static_folder="webapp")
+# ===== STORAGE =====
 user_groups: dict = {}
 
 def save_users():
@@ -38,6 +35,30 @@ def load_users():
             user_groups = {int(k): v for k, v in data.items()}
 
 load_users()
+
+# ===== TELEGRAM HELPERS =====
+def send_message(chat_id, text, keyboard=None):
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if keyboard:
+        payload["reply_markup"] = json.dumps(keyboard)
+    req.post(f"{API}/sendMessage", json=payload)
+
+def answer_callback(callback_id, text=""):
+    req.post(f"{API}/answerCallbackQuery", json={"callback_query_id": callback_id, "text": text})
+
+def set_webhook(url):
+    req.post(f"{API}/setWebhook", json={"url": url, "drop_pending_updates": True})
+
+def open_webapp_keyboard():
+    return {
+        "inline_keyboard": [[{
+            "text": "📅 Открыть расписание",
+            "web_app": {"url": WEBAPP_URL}
+        }]]
+    }
+
+# ===== FLASK APP =====
+flask_app = Flask(__name__, static_folder="webapp")
 
 @flask_app.route("/")
 def index():
@@ -83,56 +104,110 @@ def api_schedule_week():
     loop.close()
     return jsonify({"week": week})
 
-# ===== BOT =====
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    if not data:
+        return "ok"
 
-@dp.message_handler(commands=["start"])
-async def cmd_start(msg: types.Message):
-    load_users()
-    uid = msg.from_user.id
-    name = user_groups.get(uid, {}).get("group_name", "не выбрана")
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton(
-        text="📅 Открыть расписание",
-        web_app=types.WebAppInfo(url=WEBAPP_URL)
-    ))
-    await msg.answer(
-        f"👋 Привет! Я бот расписания РГПУ им. Герцена.\n\n"
-        f"Твоя группа: <b>{name}</b>\n\n"
-        f"Нажми кнопку ниже 👇",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
+    # Обычное сообщение
+    if "message" in data:
+        msg = data["message"]
+        chat_id = msg["chat"]["id"]
+        text = msg.get("text", "")
 
-@dp.message_handler(content_types=types.ContentType.WEB_APP_DATA)
-async def on_webapp_data(msg: types.Message):
-    try:
-        data = json.loads(msg.web_app_data.data)
-        uid = msg.from_user.id
-        if data.get("action") == "set_group":
-            user_groups[uid] = {
-                "group_id": data["group_id"],
-                "group_name": data["group_name"],
-                "notify": user_groups.get(uid, {}).get("notify", True)
-            }
-            save_users()
-            await msg.answer(f"✅ Группа <b>{data['group_name']}</b> сохранена!", parse_mode="HTML")
-        elif data.get("action") == "toggle_notify":
-            if uid in user_groups:
-                user_groups[uid]["notify"] = data.get("notify", True)
-                save_users()
-            status = "включены ✅" if data.get("notify") else "отключены ❌"
-            await msg.answer(f"🔔 Уведомления {status}")
-    except Exception as e:
-        logging.error(f"webapp_data error: {e}")
+        # WebApp data
+        if "web_app_data" in msg:
+            try:
+                wa = json.loads(msg["web_app_data"]["data"])
+                uid = chat_id
+                if wa.get("action") == "set_group":
+                    user_groups[uid] = {
+                        "group_id": wa["group_id"],
+                        "group_name": wa["group_name"],
+                        "notify": user_groups.get(uid, {}).get("notify", True)
+                    }
+                    save_users()
+                    send_message(uid, f"✅ Группа <b>{wa['group_name']}</b> сохранена!")
+                elif wa.get("action") == "toggle_notify":
+                    if uid in user_groups:
+                        user_groups[uid]["notify"] = wa.get("notify", True)
+                        save_users()
+                    status = "включены ✅" if wa.get("notify") else "отключены ❌"
+                    send_message(uid, f"🔔 Уведомления {status}")
+            except Exception as e:
+                logger.error(f"webapp_data error: {e}")
+            return "ok"
 
-# ===== ЗАПУСК =====
-async def on_startup(dp):
-    load_users()
-    loop = asyncio.get_event_loop()
-    loop.create_task(run_scheduler(bot, user_groups, TZ, notify_before=15))
-    Thread(target=lambda: flask_app.run(host="0.0.0.0", port=PORT), daemon=True).start()
+        if text == "/start":
+            load_users()
+            name = user_groups.get(chat_id, {}).get("group_name", "не выбрана")
+            send_message(
+                chat_id,
+                f"👋 Привет! Я бот расписания РГПУ им. Герцена.\n\n"
+                f"Твоя группа: <b>{name}</b>\n\n"
+                f"Нажми кнопку ниже 👇",
+                keyboard=open_webapp_keyboard()
+            )
 
+    return "ok"
+
+# ===== SCHEDULER =====
+def run_scheduler():
+    import time
+    notified = set()
+    while True:
+        try:
+            now = datetime.now(TZ)
+            load_users()
+            for user_id, data in list(user_groups.items()):
+                if not data.get("notify", True):
+                    continue
+                group_id = data["group_id"]
+                loop = asyncio.new_event_loop()
+                parser = HerzenParser()
+                lessons = loop.run_until_complete(parser.get_schedule_for_date(group_id, now.date()))
+                loop.close()
+
+                for lesson in lessons:
+                    key = (user_id, str(now.date()), lesson["time_start"])
+                    if key in notified:
+                        continue
+                    try:
+                        h, m = map(int, lesson["time_start"].split(":"))
+                        lesson_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                    except Exception:
+                        continue
+                    diff = (lesson_dt - now).total_seconds() / 60
+                    if 0 < diff <= 15:
+                        notified.add(key)
+                        text = (
+                            f"🔔 <b>Через {int(diff)} мин — пара!</b>\n\n"
+                            f"📚 {lesson['subject']}\n"
+                            f"⏰ {lesson['time_start']} – {lesson['time_end']}\n"
+                        )
+                        if lesson.get("room"):
+                            text += f"🏛 {lesson['room']}\n"
+                        if lesson.get("teacher"):
+                            text += f"👤 {lesson['teacher']}\n"
+                        send_message(user_id, text)
+            notified = {k for k in notified if k[1] == str(now.date())}
+        except Exception as e:
+            logger.error(f"scheduler error: {e}")
+        time.sleep(60)
+
+# ===== MAIN =====
 if __name__ == "__main__":
-    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
+    # Установить webhook
+    if WEBAPP_URL:
+        webhook_url = WEBAPP_URL.rstrip("/") + "/webhook"
+        set_webhook(webhook_url)
+        logger.info(f"Webhook set: {webhook_url}")
+
+    # Запуск планировщика в фоне
+    t = threading.Thread(target=run_scheduler, daemon=True)
+    t.start()
+
+    # Запуск Flask
+    flask_app.run(host="0.0.0.0", port=PORT)
+                

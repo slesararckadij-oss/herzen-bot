@@ -1,287 +1,82 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Расписание РГПУ</title>
-    <!-- Подключаем скрипт Телеграма -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root {
-            --bg-color: #121214;
-            --card-bg: #1c1c1e;
-            --text-main: #ffffff;
-            --text-secondary: #8e8e93;
-            --accent: #0a84ff;
-            --border-radius: 12px;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Шапка как на фото */
-        .header {
-            position: sticky;
-            top: 0;
-            background: rgba(18, 18, 20, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 15px;
-            z-index: 100;
-            border-bottom: 1px solid #2c2c2e;
-        }
-
-        .header-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .nav-days {
-            display: flex;
-            gap: 15px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-        }
-
-        .nav-item {
-            color: var(--text-secondary);
-            font-size: 14px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: 0.2s;
-        }
-
-        .nav-item.active {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .group-info {
-            margin: 10px 0;
-            padding: 0 15px;
-        }
-
-        .group-name {
-            font-size: 24px;
-            font-weight: 700;
-        }
-
-        .current-date-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-
-        /* Список пар */
-        .container {
-            padding: 15px;
-        }
-
-        /* Селектор группы (стильный) */
-        #group-select {
-            width: 100%;
-            padding: 12px;
-            background: var(--card-bg);
-            color: white;
-            border: 1px solid #3a3a3c;
-            border-radius: var(--border-radius);
-            margin-bottom: 20px;
-            outline: none;
-        }
-
-        /* Карточка пары (один в один как на скрине) */
-        .lesson-card {
-            background: var(--card-bg);
-            border-radius: var(--border-radius);
-            padding: 16px;
-            margin-bottom: 12px;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .lesson-header {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-        }
-
-        .lesson-time {
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .lesson-type {
-            color: var(--text-secondary);
-        }
-
-        .lesson-title {
-            font-size: 16px;
-            font-weight: 600;
-            line-height: 1.4;
-        }
-
-        .lesson-footer {
-            margin-top: 5px;
-            font-size: 13px;
-            color: var(--text-secondary);
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .footer-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .empty-state {
-            text-align: center;
-            margin-top: 50px;
-            color: var(--text-secondary);
-        }
-
-        /* Скрываем скроллбар */
-        .nav-days::-webkit-scrollbar { display: none; }
+        :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --text: #fff; --sec: #8e8e93; }
+        body { font-family: -apple-system; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .nav { display: flex; gap: 15px; color: var(--sec); font-size: 14px; margin-bottom: 20px; }
+        .nav .active { color: var(--accent); font-weight: bold; }
+        .group-title { font-size: 28px; font-weight: bold; margin-bottom: 5px; }
+        .date-sub { color: var(--sec); text-transform: uppercase; font-size: 12px; margin-bottom: 20px; }
+        select { width: 100%; background: var(--card); border: 1px solid #333; color: #fff; padding: 12px; border-radius: 10px; margin-bottom: 20px; }
+        .lesson { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 12px; }
+        .l-head { display: flex; justify-content: space-between; color: var(--sec); font-size: 13px; margin-bottom: 8px; }
+        .l-name { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+        .l-foot { font-size: 13px; color: var(--sec); display: flex; flex-direction: column; gap: 4px; }
+        .teacher { color: var(--accent); }
     </style>
 </head>
 <body>
+    <div class="header"><span>Расписание занятий ✅</span><span>📅</span></div>
+    <div class="nav"><span>Вчера</span><span class="active">Сегодня</span><span>Завтра</span></div>
+    <div id="group-display" class="group-title">Выберите группу</div>
+    <div id="date-display" class="date-sub"></div>
 
-<div class="header">
-    <div class="header-top">
-        <div style="font-weight:600">Расписание занятий ✅</div>
-        <div id="calendar-icon">📅</div>
-    </div>
-    <div class="nav-days">
-        <div class="nav-item" onclick="changeDate(-1)">Вчера</div>
-        <div class="nav-item active" id="today-btn" onclick="changeDate(0)">Сегодня</div>
-        <div class="nav-item" onclick="changeDate(1)">Завтра</div>
-    </div>
-</div>
+    <select id="g-select" onchange="updateGroup()"><option>Загрузка групп...</option></select>
+    <div id="list"></div>
 
-<div class="group-info">
-    <div class="group-name" id="display-group-name">Выбор группы</div>
-    <div class="current-date-label" id="display-date">Загрузка...</div>
-</div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        async function loadGroups() {
+            const r = await fetch('/api/groups');
+            const d = await r.json();
+            const s = document.getElementById('g-select');
+            s.innerHTML = '<option value="">Выбрать...</option>';
+            d.groups.forEach(g => s.add(new Option(g.name, g.id)));
+        }
 
-<div class="container">
-    <select id="group-select">
-        <option value="">Загрузка групп...</option>
-    </select>
-
-    <div id="lessons-list">
-        <!-- Сюда прилетят карточки -->
-    </div>
-</div>
-
-<script>
-    const tg = window.Telegram.WebApp;
-    tg.expand(); // Разворачиваем на весь экран
-    
-    let currentDate = new Date();
-    const API_BASE = window.location.origin + "/api";
-
-    // Инициализация
-    async function init() {
-        updateDateLabel();
-        await loadGroups();
-    }
-
-    function updateDateLabel() {
-        const options = { weekday: 'long', day: 'numeric', month: 'long' };
-        document.getElementById('display-date').innerText = currentDate.toLocaleDateString('ru-RU', options);
-    }
-
-    async function loadGroups() {
-        try {
-            const res = await fetch(`${API_BASE}/groups`);
-            const data = await res.json();
-            const sel = document.getElementById("group-select");
-            sel.innerHTML = '<option value="">Выберите группу из списка</option>';
+        async function updateGroup() {
+            const s = document.getElementById('g-select');
+            const g_id = s.value;
+            const g_name = s.options[s.selectedIndex].text;
+            if(!g_id) return;
             
-            data.groups.forEach(g => {
-                let opt = document.createElement("option");
-                opt.value = g.id;
-                opt.text = g.name;
-                sel.add(opt);
+            document.getElementById('group-display').innerText = g_name;
+            
+            // Отправляем выбор боту
+            tg.sendData(JSON.stringify({action: "set_group", group_id: g_id, group_name: g_name}));
+            
+            // Загружаем пары
+            const date = new Date().toISOString().split('T')[0];
+            const r = await fetch(`/api/schedule?group_id=${g_id}&date=${date}`);
+            const data = await r.json();
+            render(data.lessons);
+        }
+
+        function render(lessons) {
+            const container = document.getElementById('list');
+            container.innerHTML = lessons.length ? '' : '<p style="color:gray">Пар нет</p>';
+            lessons.forEach(l => {
+                container.innerHTML += `
+                    <div class="lesson">
+                        <div class="l-head"><span>${l.time_start} - ${l.time_end}</span><span>${l.type}</span></div>
+                        <div class="l-name">${l.subject}</div>
+                        <div class="l-foot">
+                            <span>🏛 ${l.room}</span>
+                            <span class="teacher">👤 ${l.teacher}</span>
+                        </div>
+                    </div>`;
             });
-        } catch (e) {
-            console.error("Ошибка загрузки групп", e);
         }
-    }
 
-    async function loadSchedule() {
-        const groupId = document.getElementById("group-select").value;
-        const groupName = document.getElementById("group-select").options[document.getElementById("group-select").selectedIndex].text;
-        
-        if (!groupId) return;
-        
-        document.getElementById('display-group-name').innerText = groupName;
-        const container = document.getElementById("lessons-list");
-        container.innerHTML = '<div class="empty-state">Загрузка пар...</div>';
-
-        const dateStr = currentDate.toISOString().split('T')[0];
-        
-        try {
-            const res = await fetch(`${API_BASE}/schedule?group_id=${groupId}&date=${dateStr}`);
-            const data = await res.json();
-            
-            container.innerHTML = "";
-            
-            if (!data.lessons || data.lessons.length === 0) {
-                container.innerHTML = '<div class="empty-state">🎉 Пар нет, отдыхай!</div>';
-                return;
-            }
-
-            data.lessons.forEach((l, index) => {
-                const card = document.createElement("div");
-                card.className = "lesson-card";
-                card.innerHTML = `
-                    <div class="lesson-header">
-                        <div class="lesson-time">${l.time_start} - ${l.time_end}</div>
-                        <div class="lesson-type">${l.type || 'Занятие'}</div>
-                    </div>
-                    <div class="lesson-title">${l.subject}</div>
-                    <div class="lesson-footer">
-                        <div class="footer-item">🎓 <span>${l.room || 'Не указана'}</span></div>
-                        <div class="footer-item">👤 <span style="color: #0a84ff">${l.teacher || 'Преподаватель не указан'}</span></div>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        } catch (e) {
-            container.innerHTML = '<div class="empty-state">Ошибка загрузки. Проверь интернет.</div>';
-        }
-    }
-
-    function changeDate(offset) {
-        if (offset === 0) {
-            currentDate = new Date();
-        } else {
-            currentDate.setDate(currentDate.getDate() + offset);
-        }
-        
-        // Визуальное переключение вкладок
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        if (offset === 0) document.getElementById('today-btn').classList.add('active');
-        
-        updateDateLabel();
-        loadSchedule();
-    }
-
-    document.getElementById("group-select").addEventListener("change", loadSchedule);
-
-    init();
-</script>
+        document.getElementById('date-display').innerText = new Date().toLocaleDateString('ru-RU', {weekday:'long', day:'numeric', month:'long'});
+        loadGroups();
+    </script>
 </body>
 </html>

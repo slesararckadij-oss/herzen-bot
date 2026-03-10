@@ -4,7 +4,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-
 async def run_scheduler(bot, user_groups: dict, tz, notify_before: int = 15):
     from parser import HerzenParser
     logger.info("Scheduler started")
@@ -19,7 +18,6 @@ async def run_scheduler(bot, user_groups: dict, tz, notify_before: int = 15):
                 group_id = data["group_id"]
                 parser = HerzenParser()
                 lessons = await parser.get_schedule_for_date(group_id, now.date())
-
                 for lesson in lessons:
                     key = (user_id, str(now.date()), lesson["time_start"])
                     if key in notified:
@@ -29,7 +27,6 @@ async def run_scheduler(bot, user_groups: dict, tz, notify_before: int = 15):
                         lesson_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
                     except Exception:
                         continue
-
                     diff = (lesson_dt - now).total_seconds() / 60
                     if 0 < diff <= notify_before:
                         notified.add(key)
@@ -48,9 +45,7 @@ async def run_scheduler(bot, user_groups: dict, tz, notify_before: int = 15):
                             await bot.send_message(user_id, text, parse_mode="HTML")
                         except Exception as e:
                             logger.warning(f"notify failed {user_id}: {e}")
-
             notified = {k for k in notified if k[1] == str(now.date())}
         except Exception as e:
             logger.error(f"scheduler error: {e}")
-
         await asyncio.sleep(60)

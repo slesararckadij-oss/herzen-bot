@@ -3,7 +3,7 @@ import os
 import json
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, send_from_directory, request, Response
 import pytz
 import urllib.request
@@ -32,7 +32,6 @@ def load_users():
 load_users()
 
 def tg_request(method, payload):
-    """Отправка запроса в Telegram API с правильной UTF-8 кодировкой"""
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         f"{API}/{method}",
@@ -54,7 +53,6 @@ def send_message(chat_id, text, keyboard=None):
         "parse_mode": "HTML"
     }
     if keyboard:
-        # ВАЖНО: передаём dict напрямую, НЕ делаем json.dumps
         payload["reply_markup"] = keyboard
     tg_request("sendMessage", payload)
 
@@ -88,6 +86,7 @@ def api_groups():
     import asyncio
     from parser import HerzenParser
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     groups = loop.run_until_complete(HerzenParser().get_all_groups())
     loop.close()
     return json_response({"groups": groups})
@@ -105,26 +104,10 @@ def api_schedule():
     except Exception:
         return json_response({"error": "bad date"})
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     lessons = loop.run_until_complete(HerzenParser().get_schedule_for_date(group_id, target))
     loop.close()
     return json_response({"lessons": lessons})
-
-@flask_app.route("/api/schedule/week")
-def api_schedule_week():
-    import asyncio
-    from parser import HerzenParser
-    group_id = request.args.get("group_id", type=int)
-    date_str = request.args.get("date")
-    if not group_id or not date_str:
-        return json_response({"error": "missing params"})
-    try:
-        target = datetime.strptime(date_str, "%Y-%m-%d").date()
-    except Exception:
-        return json_response({"error": "bad date"})
-    loop = asyncio.new_event_loop()
-    week = loop.run_until_complete(HerzenParser().get_schedule_week(group_id, target))
-    loop.close()
-    return json_response({"week": week})
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
@@ -183,6 +166,7 @@ def run_scheduler():
                 if not data.get("notify", True):
                     continue
                 loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 lessons = loop.run_until_complete(
                     HerzenParser().get_schedule_for_date(data["group_id"], now.date())
                 )
@@ -195,7 +179,7 @@ def run_scheduler():
                         h, m = map(int, lesson["time_start"].split(":"))
                         lesson_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
                         diff = (lesson_dt - now).total_seconds() / 60
-                        if 0 < diff <= 15:
+                        if 0 < diff <= 10:  # Напоминание за 10 минут
                             notified.add(key)
                             t = f"🔔 <b>Через {int(diff)} мин — пара!</b>\n\n📚 {lesson['subject']}\n⏰ {lesson['time_start']} – {lesson['time_end']}\n"
                             if lesson.get("room"): t += f"🏛 {lesson['room']}\n"
@@ -203,6 +187,7 @@ def run_scheduler():
                             send_message(user_id, t)
                     except Exception:
                         continue
+            # Оставляем только текущие день-ключи
             notified = {k for k in notified if k[1] == str(now.date())}
         except Exception as e:
             logger.error(f"scheduler: {e}")

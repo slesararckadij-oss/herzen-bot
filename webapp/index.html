@@ -3,636 +3,413 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>\u0420\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0435</title>
+<title>Расписание</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
-  :root {
-    --bg: #0f0f0f;
-    --surface: #1a1a1a;
-    --surface2: #222222;
-    --border: #2e2e2e;
-    --accent: #4d9fff;
-    --accent2: #7c5cbf;
-    --text: #f0f0f0;
-    --text2: #888;
-    --text3: #555;
-    --green: #3ecf8e;
-    --orange: #f59e0b;
-    --pink: #f472b6;
-    --radius: 16px;
-  }
+:root{
+--bg:#0f0f0f;
+--surface:#1a1a1a;
+--surface2:#222;
+--border:#2e2e2e;
+--accent:#4d9fff;
+--accent2:#7c5cbf;
+--text:#f0f0f0;
+--text2:#888;
+--text3:#555;
+--green:#3ecf8e;
+--orange:#f59e0b;
+--pink:#f472b6;
+--radius:16px;
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-  body {
-    font-family: 'Manrope', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+body{
+font-family:'Manrope',sans-serif;
+background:var(--bg);
+color:var(--text);
+min-height:100vh;
+}
 
-  /* HEADER */
-  .header {
-    padding: 16px 16px 0;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--bg);
-  }
+.header{
+padding:16px 16px 0;
+position:sticky;
+top:0;
+z-index:100;
+background:var(--bg);
+}
 
-  .header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-  }
+.header-top{
+display:flex;
+align-items:center;
+justify-content:space-between;
+margin-bottom:14px;
+}
 
-  .group-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 8px 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .group-badge:active { transform: scale(0.97); }
-  .group-badge .dot {
-    width: 8px; height: 8px;
-    background: var(--green);
-    border-radius: 50%;
-    box-shadow: 0 0 6px var(--green);
-  }
-  .group-badge span { font-size: 14px; font-weight: 700; }
-  .group-badge .chevron { color: var(--text3); font-size: 12px; }
+.group-badge{
+display:flex;
+align-items:center;
+gap:8px;
+background:var(--surface);
+border:1px solid var(--border);
+border-radius:12px;
+padding:8px 12px;
+cursor:pointer;
+}
 
-  .notify-btn {
-    width: 38px; height: 38px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    font-size: 18px;
-    transition: all 0.2s;
-  }
-  .notify-btn:active { transform: scale(0.93); }
-  .notify-btn.active { border-color: var(--accent); background: rgba(77,159,255,0.1); }
+.group-badge .dot{
+width:8px;
+height:8px;
+background:var(--green);
+border-radius:50%;
+box-shadow:0 0 6px var(--green);
+}
 
-  /* DAY TABS */
-  .tabs {
-    display: flex;
-    gap: 6px;
-    padding-bottom: 14px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tabs::-webkit-scrollbar { display: none; }
+.group-badge span{
+font-size:14px;
+font-weight:700;
+}
 
-  .tab {
-    flex-shrink: 0;
-    padding: 7px 16px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: 1px solid transparent;
-    color: var(--text2);
-    background: transparent;
-  }
-  .tab.active {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 4px 16px rgba(77,159,255,0.3);
-  }
-  .tab:not(.active):active { background: var(--surface); }
+.notify-btn{
+width:38px;
+height:38px;
+background:var(--surface);
+border:1px solid var(--border);
+border-radius:12px;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+font-size:18px;
+}
 
-  /* MAIN */
-  .main {
-    padding: 8px 16px 100px;
-  }
+.tabs{
+display:flex;
+gap:6px;
+padding-bottom:14px;
+overflow-x:auto;
+}
 
-  .date-heading {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 12px;
-    margin-top: 4px;
-  }
+.tab{
+flex-shrink:0;
+padding:7px 16px;
+border-radius:10px;
+font-size:13px;
+font-weight:600;
+cursor:pointer;
+color:var(--text2);
+}
 
-  /* LESSON CARD */
-  .lesson-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
-    margin-bottom: 10px;
-    position: relative;
-    overflow: hidden;
-    animation: slideUp 0.3s ease both;
-  }
+.tab.active{
+background:var(--accent);
+color:#fff;
+}
 
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+.main{
+padding:8px 16px 100px;
+}
 
-  .lesson-card::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    border-radius: 3px 0 0 3px;
-  }
-  .lesson-card.type-lec::before { background: var(--accent); }
-  .lesson-card.type-prac::before { background: var(--green); }
-  .lesson-card.type-sem::before { background: var(--orange); }
-  .lesson-card.type-lab::before { background: var(--pink); }
-  .lesson-card.type-other::before { background: var(--text3); }
+.loading{
+text-align:center;
+padding:60px 20px;
+color:var(--text2);
+font-size:14px;
+}
 
-  .lesson-card.remote {
-    border-color: rgba(124,92,191,0.4);
-    background: rgba(124,92,191,0.05);
-  }
+.spinner{
+width:32px;
+height:32px;
+border:3px solid var(--border);
+border-top-color:var(--accent);
+border-radius:50%;
+animation:spin .8s linear infinite;
+margin:0 auto 16px;
+}
 
-  .card-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
+@keyframes spin{
+to{transform:rotate(360deg)}
+}
 
-  .time-range {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-  }
-  .lesson-card.remote .time-range { color: var(--accent2); }
+.empty{
+text-align:center;
+padding:60px 20px;
+}
 
-  .type-chip {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: var(--surface2);
-    color: var(--text2);
-    border: 1px solid var(--border);
-  }
+.empty .emoji{
+font-size:52px;
+margin-bottom:16px;
+}
 
-  .lesson-title {
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.4;
-    margin-bottom: 8px;
-    color: var(--text);
-  }
+.empty h3{
+font-size:17px;
+font-weight:700;
+margin-bottom:8px;
+}
 
-  .meta-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text2);
-    margin-top: 4px;
-  }
-  .meta-row .icon { font-size: 13px; flex-shrink: 0; }
+.empty p{
+font-size:14px;
+color:var(--text2);
+}
 
-  .remote-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent2);
-    background: rgba(124,92,191,0.1);
-    border: 1px solid rgba(124,92,191,0.3);
-    border-radius: 6px;
-    padding: 3px 8px;
-    margin-top: 6px;
-  }
+.bottom-nav{
+position:fixed;
+bottom:0;
+left:0;
+right:0;
+background:rgba(15,15,15,0.95);
+border-top:1px solid var(--border);
+padding:10px 16px 20px;
+display:flex;
+gap:8px;
+}
 
-  /* EMPTY STATE */
-  .empty {
-    text-align: center;
-    padding: 60px 20px;
-    animation: slideUp 0.3s ease both;
-  }
-  .empty .emoji { font-size: 52px; margin-bottom: 16px; }
-  .empty h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
-  .empty p { font-size: 14px; color: var(--text2); line-height: 1.5; }
+.nav-btn{
+flex:1;
+padding:10px;
+border-radius:12px;
+font-size:12px;
+font-weight:700;
+cursor:pointer;
+text-align:center;
+background:var(--surface);
+color:var(--text2);
+border:1px solid var(--border);
+}
 
-  /* LOADING */
-  .loading {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text2);
-    font-size: 14px;
-  }
-  .spinner {
-    width: 32px; height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+.nav-btn.active{
+background:var(--accent);
+color:#fff;
+}
 
-  /* WEEK DIVIDER */
-  .week-day-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 20px 0 10px;
-  }
-  .week-day-header:first-child { margin-top: 0; }
-  .week-day-name {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text3);
-  }
-  .week-day-line {
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-  .week-day-count {
-    font-size: 11px;
-    color: var(--text3);
-    font-weight: 600;
-  }
-
-  /* GROUP SELECTOR MODAL */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 200;
-    display: flex;
-    align-items: flex-end;
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.2s ease;
-  }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  .modal {
-    background: var(--surface);
-    border-radius: 20px 20px 0 0;
-    padding: 20px 16px 40px;
-    width: 100%;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    animation: slideModal 0.3s ease;
-  }
-  @keyframes slideModal { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-  .modal-handle {
-    width: 36px; height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    margin: 0 auto 16px;
-  }
-
-  .modal h2 { font-size: 17px; font-weight: 800; margin-bottom: 14px; }
-
-  .search-input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 11px 14px;
-    font-size: 14px;
-    font-family: 'Manrope', sans-serif;
-    color: var(--text);
-    outline: none;
-    margin-bottom: 12px;
-    transition: border-color 0.2s;
-  }
-  .search-input:focus { border-color: var(--accent); }
-  .search-input::placeholder { color: var(--text3); }
-
-  .groups-list {
-    overflow-y: auto;
-    flex: 1;
-  }
-  .group-item {
-    padding: 12px 14px;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
-    margin-bottom: 4px;
-  }
-  .group-item:active { background: var(--surface2); }
-  .group-item.selected {
-    background: rgba(77,159,255,0.1);
-    color: var(--accent);
-    border: 1px solid rgba(77,159,255,0.2);
-  }
-
-  /* BOTTOM NAV */
-  .bottom-nav {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    background: rgba(15,15,15,0.95);
-    backdrop-filter: blur(12px);
-    border-top: 1px solid var(--border);
-    padding: 10px 16px 20px;
-    display: flex;
-    gap: 8px;
-  }
-  .nav-btn {
-    flex: 1;
-    padding: 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-    background: var(--surface);
-    color: var(--text2);
-    border: 1px solid var(--border);
-  }
-  .nav-btn:active { transform: scale(0.96); }
-  .nav-btn.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: transparent;
-    box-shadow: 0 4px 12px rgba(77,159,255,0.25);
-  }
-  .nav-btn .nav-icon { font-size: 18px; display: block; margin-bottom: 2px; }
+.nav-icon{
+font-size:18px;
+display:block;
+margin-bottom:2px;
+}
 </style>
 </head>
+
 <body>
 
 <div class="header">
-  <div class="header-top">
-    <div class="group-badge" onclick="openGroupModal()">
-      <div class="dot"></div>
-      <span id="groupName">\u0412\u044b\u0431\u0435\u0440\u0438 \u0433\u0440\u0443\u043f\u043f\u0443</span>
-      <span class="chevron">\u25be</span>
-    </div>
-    <div class="notify-btn" id="notifyBtn" onclick="toggleNotify()">\ud83d\udd14</div>
-  </div>
-  <div class="tabs" id="tabs"></div>
+
+<div class="header-top">
+<div class="group-badge" onclick="openGroupModal()">
+<div class="dot"></div>
+<span id="groupName">Выбери группу</span>
+</div>
+
+<div class="notify-btn" id="notifyBtn" onclick="toggleNotify()">🔔</div>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
 </div>
 
 <div class="main" id="main">
-  <div class="loading"><div class="spinner"></div>\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...</div>
+<div class="loading">
+<div class="spinner"></div>
+Загрузка...
+</div>
 </div>
 
 <div class="bottom-nav">
-  <div class="nav-btn active" id="navToday" onclick="switchView('today')">
-    <span class="nav-icon">\ud83d\udcc5</span>\u0421\u0435\u0433\u043e\u0434\u043d\u044f
-  </div>
-  <div class="nav-btn" id="navTomorrow" onclick="switchView('tomorrow')">
-    <span class="nav-icon">\ud83d\uddd3</span>\u0417\u0430\u0432\u0442\u0440\u0430
-  </div>
-  <div class="nav-btn" id="navWeek" onclick="switchView('week')">
-    <span class="nav-icon">\ud83d\udcc6</span>\u041d\u0435\u0434\u0435\u043b\u044f
-  </div>
+
+<div class="nav-btn active" id="navToday" onclick="switchView('today')">
+<span class="nav-icon">📅</span>
+Сегодня
 </div>
 
-<!-- GROUP MODAL -->
-<div class="modal-overlay" id="modalOverlay" style="display:none" onclick="closeGroupModal(event)">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2>\u0412\u044b\u0431\u0435\u0440\u0438 \u0433\u0440\u0443\u043f\u043f\u0443</h2>
-    <input class="search-input" id="groupSearch" placeholder="\u041f\u043e\u0438\u0441\u043a: \u0421\u041f\u041f, \u0424\u0418\u0417..." oninput="filterGroups()" autofocus>
-    <div class="groups-list" id="groupsList"></div>
-  </div>
+<div class="nav-btn" id="navTomorrow" onclick="switchView('tomorrow')">
+<span class="nav-icon">🗓</span>
+Завтра
+</div>
+
+<div class="nav-btn" id="navWeek" onclick="switchView('week')">
+<span class="nav-icon">📆</span>
+Неделя
+</div>
+
 </div>
 
 <script>
-const tg = window.Telegram?.WebApp;
-if (tg) { tg.ready(); tg.expand(); }
 
-// ===== STATE =====
-let state = {
-  groupId: localStorage.getItem('groupId') || null,
-  groupName: localStorage.getItem('groupName') || null,
-  notify: localStorage.getItem('notify') !== 'false',
-  view: 'today',
-  schedule: {},
-  allGroups: [],
-};
-
-const WEEKDAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-const WEEKDAY_RU = { monday:'\u041f\u043e\u043d\u0435\u0434\u0435\u043b\u044c\u043d\u0438\u043a', tuesday:'\u0412\u0442\u043e\u0440\u043d\u0438\u043a', wednesday:'\u0421\u0440\u0435\u0434\u0430',
-  thursday:'\u0427\u0435\u0442\u0432\u0435\u0440\u0433', friday:'\u041f\u044f\u0442\u043d\u0438\u0446\u0430', saturday:'\u0421\u0443\u0431\u0431\u043e\u0442\u0430' };
-
-// ===== INIT =====
-async function init() {
-  renderNotifyBtn();
-  if (!state.groupId) {
-    showEmpty('\ud83d\udc4b', '\u041f\u0440\u0438\u0432\u0435\u0442!', '\u0412\u044b\u0431\u0435\u0440\u0438 \u0441\u0432\u043e\u044e \u0433\u0440\u0443\u043f\u043f\u0443, \u043d\u0430\u0436\u0430\u0432 \u043d\u0430 \u043a\u043d\u043e\u043f\u043a\u0443 \u0441\u0432\u0435\u0440\u0445\u0443');
-    buildTabs();
-    return;
-  }
-  document.getElementById('groupName').textContent = state.groupName;
-  buildTabs();
-  await loadSchedule('today');
+const tg = window.Telegram?.WebApp
+if(tg){
+tg.ready()
+tg.expand()
 }
 
-// ===== TABS =====
-function buildTabs() {
-  const tabs = document.getElementById('tabs');
-  const today = new Date();
-  const items = [];
-  for (let i = -1; i <= 5; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const label = i === -1 ? '\u0412\u0447\u0435\u0440\u0430' : i === 0 ? '\u0421\u0435\u0433\u043e\u0434\u043d\u044f' : i === 1 ? '\u0417\u0430\u0432\u0442\u0440\u0430' : formatTabDate(d);
-    items.push({ label, date: d, offset: i });
-  }
-  tabs.innerHTML = items.map((t, idx) =>
-    `<div class="tab ${t.offset === 0 ? 'active' : ''}" data-offset="${t.offset}" onclick="switchDay(${t.offset}, this)">${t.label}</div>`
-  ).join('');
+let state={
+groupId:localStorage.getItem("groupId")||null,
+groupName:localStorage.getItem("groupName")||null,
+notify:localStorage.getItem("notify")!=="false"
 }
 
-function formatTabDate(d) {
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+function showLoading(){
+document.getElementById("main").innerHTML=
+'<div class="loading"><div class="spinner"></div>Загрузка расписания...</div>'
 }
 
-function switchDay(offset, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  loadScheduleForDate(d);
-  // sync bottom nav
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  if (offset === 0) document.getElementById('navToday').classList.add('active');
-  else if (offset === 1) document.getElementById('navTomorrow').classList.add('active');
+function showEmpty(emoji,title,text){
+document.getElementById("main").innerHTML=
+`
+<div class="empty">
+<div class="emoji">${emoji}</div>
+<h3>${title}</h3>
+<p>${text}</p>
+</div>
+`
 }
 
-// ===== VIEW SWITCH =====
-function switchView(view) {
-  state.view = view;
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('nav' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+function toggleNotify(){
+state.notify=!state.notify
+localStorage.setItem("notify",state.notify)
 
-  if (view === 'week') {
-    loadWeekSchedule();
-  } else {
-    const offset = view === 'today' ? 0 : 1;
-    // sync tab
-    document.querySelectorAll('.tab').forEach(t => {
-      t.classList.toggle('active', parseInt(t.dataset.offset) === offset);
-    });
-    const d = new Date();
-    d.setDate(d.getDate() + offset);
-    loadScheduleForDate(d);
-  }
+if(tg){
+tg.sendData(JSON.stringify({
+action:"toggle_notify",
+notify:state.notify
+}))
 }
 
-// ===== SCHEDULE LOADING =====
-async function loadSchedule(type) {
-  const d = new Date();
-  if (type === 'tomorrow') d.setDate(d.getDate() + 1);
-  await loadScheduleForDate(d);
+document.getElementById("notifyBtn").style.opacity=state.notify?1:0.5
 }
 
-async function loadScheduleForDate(date) {
-  if (!state.groupId) return;
-  showLoading();
-  const dateStr = formatDate(date);
-  const dayLabel = date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
-
-  try {
-    const resp = await fetch(`/api/schedule?group_id=${state.groupId}&date=${dateStr}`);
-    const data = await resp.json();
-    renderLessons(data.lessons || [], capitalizeFirst(dayLabel));
-  } catch(e) {
-    showEmpty('\ud83d\ude15', '\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438', '\u041f\u0440\u043e\u0432\u0435\u0440\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u0443');
-  }
+function openGroupModal(){
+alert("Здесь будет выбор группы (подключается к /api/groups)")
 }
 
-async function loadWeekSchedule() {
-  if (!state.groupId) return;
-  showLoading();
-  const today = formatDate(new Date());
-  try {
-    const resp = await fetch(`/api/schedule/week?group_id=${state.groupId}&date=${today}`);
-    const data = await resp.json();
-    renderWeek(data.week || {});
-  } catch(e) {
-    showEmpty('\ud83d\ude15', '\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438', '\u041f\u0440\u043e\u0432\u0435\u0440\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u0443');
-  }
+function switchView(view){
+
+if(view==="today") loadSchedule(0)
+if(view==="tomorrow") loadSchedule(1)
+if(view==="week") loadWeek()
+
 }
 
-// ===== RENDER =====
-function renderLessons(lessons, dayLabel) {
-  const main = document.getElementById('main');
-  if (!lessons.length) {
-    showEmpty('\ud83c\udf89', '\u041f\u0430\u0440 \u043d\u0435\u0442!', `${capitalizeFirst(dayLabel)} \u2014 \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u044b\u0439 \u0434\u0435\u043d\u044c`);
-    return;
-  }
+async function loadSchedule(offset){
 
-  main.innerHTML = `<div class="date-heading">${dayLabel}</div>` +
-    lessons.map((l, i) => lessonCard(l, i)).join('');
+if(!state.groupId){
+showEmpty("👋","Привет","Сначала выбери группу")
+return
 }
 
-function renderWeek(week) {
-  const main = document.getElementById('main');
-  const order = ['monday','tuesday','wednesday','thursday','friday','saturday'];
-  let html = '';
-  let hasAny = false;
+showLoading()
 
-  for (const day of order) {
-    const lessons = week[day] || [];
-    if (!lessons.length) continue;
-    hasAny = true;
-    html += `
-      <div class="week-day-header">
-        <span class="week-day-name">${WEEKDAY_RU[day]}</span>
-        <div class="week-day-line"></div>
-        <span class="week-day-count">${lessons.length} \u043f\u0430\u0440${pluralPairs(lessons.length)}</span>
-      </div>
-      ${lessons.map((l, i) => lessonCard(l, i)).join('')}
-    `;
-  }
+let d=new Date()
+d.setDate(d.getDate()+offset)
 
-  main.innerHTML = hasAny ? html : '';
-  if (!hasAny) showEmpty('\ud83d\udced', '\u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445', '\u0420\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043d\u0430 \u044d\u0442\u0443 \u043d\u0435\u0434\u0435\u043b\u044e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e');
+let date=d.toISOString().slice(0,10)
+
+try{
+
+let r=await fetch(`/api/schedule?group_id=${state.groupId}&date=${date}`)
+let data=await r.json()
+
+renderLessons(data.lessons||[])
+
+}catch(e){
+
+showEmpty("😕","Ошибка","Не удалось загрузить расписание")
+
 }
 
-function lessonCard(l, i) {
-  const typeClass = { '\u041b\u0435\u043a\u0446\u0438\u044f':'lec','\u041f\u0440\u0430\u043a\u0442\u0438\u043a\u0430':'prac','\u0421\u0435\u043c\u0438\u043d\u0430\u0440':'sem','\u041b\u0430\u0431':'lab' }[l.type] || 'other';
-  const typeEmoji = { '\u041b\u0435\u043a\u0446\u0438\u044f':'\ud83d\udcd6','\u041f\u0440\u0430\u043a\u0442\u0438\u043a\u0430':'\u270f\ufe0f','\u0421\u0435\u043c\u0438\u043d\u0430\u0440':'\ud83d\udcac','\u041b\u0430\u0431':'\ud83d\udd2c' }[l.type] || '\ud83d\udccc';
-  const delay = i * 0.05;
-  return `
-    <div class="lesson-card type-${typeClass} ${l.is_remote ? 'remote' : ''}" style="animation-delay:${delay}s">
-      <div class="card-top">
-        <span class="time-range">${l.time_start} \u2014 ${l.time_end}</span>
-        <span class="type-chip">${typeEmoji} ${l.type}</span>
-      </div>
-      <div class="lesson-title">${l.subject}</div>
-      ${l.teacher ? `<div class="meta-row"><span class="icon">\ud83d\udc64</span>${l.teacher}</div>` : ''}
-      ${l.room ? `<div class="meta-row"><span class="icon">\ud83c\udfdb</span>${l.room}</div>` : ''}
-      ${l.is_remote ? `<div class="remote-badge">\ud83d\udcbb \u0414\u0438\u0441\u0442\u0430\u043d\u0446\u0438\u043e\u043d\u043d\u043e</div>` : ''}
-    </div>
-  `;
 }
 
-function showLoading() {
-  document.getElementById('main').innerHTML = '<div class="loading"><div class="spinner"></div>\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044e \u0440\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0435...</div>';
+async function loadWeek(){
+
+if(!state.groupId){
+showEmpty("👋","Привет","Сначала выбери группу")
+return
 }
 
-function showEmpty(emoji, title, text) {
-  document.getElementById('main').innerHTML = `
-    <div class="empty">
-      <div class="emoji">${emoji}</div>
-      <h3>${title}</h3>
-      <p>${text}</p>
-    </div>
-  `;
+showLoading()
+
+try{
+
+let today=new Date().toISOString().slice(0,10)
+
+let r=await fetch(`/api/schedule/week?group_id=${state.groupId}&date=${today}`)
+let data=await r.json()
+
+renderWeek(data.week||{})
+
+}catch(e){
+
+showEmpty("😕","Ошибка","Не удалось загрузить расписание")
+
 }
 
-// ===== GROUP MODAL =====
-async function openGroupModal() {
-  document.getElementById('modalOverlay').style.display = 'flex';
-  if (!state.allGroups.length) {
-    document.getElementById('groupsList').innerHTML = '<div style="color:var(--text2);text-align:center;padding:20px">\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044e...</div>';
-    try {
-      const resp = await fetch('/api/groups');
-      const data = await resp.json();
-      state.allGroups = data.groups || [];
-    } catch(e) {
-      document.getElementById('groupsList').innerHTML = '<div style="color:var(--text2);text-align:center;padding:20px">\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0433\u0440\u0443\u043f\u043f</div>';
-      return;
-    }
-  }
-  renderGroupsList(state.allGroups);
-  document.getElementById('groupSearch').focus();
 }
 
-function closeGroupModal(e) {
-  if (e.target === document.getElementById('modalOverlay')) {
-    document.getElementById('modalOverlay').style.display = 'none';
-  }
+function renderLessons(list){
+
+if(!list.length){
+showEmpty("🎉","Пар нет","Сегодня свободный день")
+return
 }
 
-function filterGroups() {
-  const q = document.getElementById('groupSearch').value.toLowerCase();
-  const filtered = state.allGroups.filter(g => g.name.toLowerCase().includes(q));
-  renderGroupsList(filtered);
+let html=""
+
+for(let l of list){
+
+html+=`
+<div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:14px;margin-bottom:10px">
+
+<div style="font-weight:700;color:#4d9fff">${l.time_start} — ${l.time_end}</div>
+
+<div style="font-weight:700;margin-top:4px">${l.subject}</div>
+
+${l.teacher?`<div style="font-size:12px;color:#888">👤 ${l.teacher}</div>`:""}
+
+${l.room?`<div style="font-size:12px;color:#888">🏛 ${l.room}</div>`:""}
+
+</div>
+`
+
 }
 
-function renderGroupsList(groups) {
-  const list = document.getElementById('groupsList');
-  if
+document.getElementById("main").innerHTML=html
+
+}
+
+function renderWeek(week){
+
+let html=""
+
+for(let day in week){
+
+let lessons=week[day]
+
+if(!lessons.length) continue
+
+html+=`<h3 style="margin:12px 0">${day}</h3>`
+
+for(let l of lessons){
+
+html+=`
+<div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:14px;margin-bottom:10px">
+
+<div style="font-weight:700;color:#4d9fff">${l.time_start} — ${l.time_end}</div>
+
+<div style="font-weight:700;margin-top:4px">${l.subject}</div>
+
+</div>
+`
+
+}
+
+}
+
+document.getElementById("main").innerHTML=html
+
+}
+
+</script>
+
+</body>
+</html>

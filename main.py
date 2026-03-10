@@ -40,8 +40,8 @@ load_users()
 def send_message(chat_id, text, keyboard=None):
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if keyboard:
-        payload["reply_markup"] = json.dumps(keyboard)
-    req.post(f"{API}/sendMessage", json=payload)
+        payload["reply_markup"] = json.dumps(keyboard, ensure_ascii=False)
+    req.post(f"{API}/sendMessage", json=payload, headers={"Content-Type": "application/json; charset=utf-8"})
 
 def answer_callback(callback_id, text=""):
     req.post(f"{API}/answerCallbackQuery", json={"callback_query_id": callback_id, "text": text})

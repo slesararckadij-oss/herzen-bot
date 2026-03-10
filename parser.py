@@ -1,15 +1,11 @@
 import aiohttp
 from bs4 import BeautifulSoup
-from datetime import date
 import re
 import logging
+from datetime import date
 
-# Настройка логов, чтобы видеть ошибки в консоли Render
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 BASE_URL = "https://guide.herzen.spb.ru"
-# Юзер-агент, чтобы сайт не думал, что мы тупой бот
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
@@ -26,80 +22,52 @@ class HerzenParser:
     async def _get(self, url: str) -> str:
         session = await self._get_session()
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as r:
-                if r.status != 200:
-                    logger.error(f"Ошибка сайта: {r.status}")
-                    return ""
-                return await r.text(encoding="utf-8")
+            async with session.get(url, timeout=15) as r:
+                return await r.text(encoding="utf-8") if r.status == 200 else ""
         except Exception as e:
-            logger.error(f"Ошибка запроса: {e}")
+            logger.error(f"Request error: {e}")
             return ""
 
     async def get_all_groups(self) -> list[dict]:
-        """
-        Парсим список групп правильно. 
-        На сайте Герцена группы лежат в выпадающих списках или ссылках.
-        """
+        """Глубокий парсинг всех групп через факультеты"""
         try:
-            # Сначала заходим на главную расписания
-            url = f"{BASE_URL}/static/schedule.php"
-            html = await self._get(url)
-            if not html:
-                return []
-
-            soup = BeautifulSoup(html, "html.parser")
-            groups = []
+            html_main = await self._get(f"{BASE_URL}/static/schedule.php")
+            if not html_main: return []
             
-            # Ищем все ссылки, которые ведут на расписание групп
-            # Обычно они выглядят как schedule_view.php?id_group=12345
-            links = soup.find_all('a', href=re.compile(r"id_group=\d+"))
+            soup_main = BeautifulSoup(html_main, "html.parser")
+            fac_links = soup_main.find_all('a', href=re.compile(r"id_fac=\d+"))
             
+            all_groups = []
             seen_ids = set()
-            for link in links:
-                name = link.get_text(strip=True)
-                href = link.get('href', '')
-                group_id_match = re.search(r"id_group=(\.d+)", href)
+
+            for fac in fac_links:
+                fac_url = f"{BASE_URL}/static/{fac['href']}"
+                html_fac = await self._get(fac_url)
+                if not html_fac: continue
                 
-                if group_id_match:
-                    group_id = group_id_match.group(1)
+                soup_fac = BeautifulSoup(html_fac, "html.parser")
+                group_links = soup_fac.find_all('a', href=re.compile(r"id_group=\d+"))
+                
+                for g_link in group_links:
+                    group_id = re.search(r"id_group=(\d+)", g_link['href']).group(1)
+                    name = g_link.get_text(strip=True)
                     if group_id not in seen_ids and len(name) > 2:
                         seen_ids.add(group_id)
-                        groups.append({
-                            "id": group_id, 
-                            "name": name
-                        })
+                        all_groups.append({"id": group_id, "name": name})
             
-            logger.info(f"Найдено групп: {len(groups)}")
-            return groups
-
+            return sorted(all_groups, key=lambda x: x['name'])
         except Exception as e:
-            logger.error(f"get_all_groups error: {e}")
+            logger.error(f"Parser error: {e}")
             return []
 
-    async def get_schedule_week(self, group_id: str, week_start: date) -> dict:
-        """Подгружаем неделю. Важно: id_group должен быть числом из ссылки"""
-        try:
-            # Добавляем семестр (обычно 1 или 2)
-            url = f"{BASE_URL}/static/schedule_view.php?id_group={group_id}"
-            html = await self._get(url)
-            if not html:
-                return {}
-            return self._parse_schedule_html(html, week_start)
-        except Exception as e:
-            logger.error(f"get_schedule_week error: {e}")
-            return {}
-
-    def _parse_schedule_html(self, html: str, ref_date: date) -> dict:
-        """
-        Тут должна быть логика парсинга таблицы. 
-        Если она у тебя была 'наворочена' GPT — присылай её следующим куском, 
-        я её перепишу под нормальный вид (карточки).
-        """
+    async def get_schedule_for_date(self, group_id: str, target_date: date) -> list:
+        """Парсинг расписания на конкретный день"""
+        url = f"{BASE_URL}/static/schedule_view.php?id_group={group_id}"
+        html = await self._get(url)
+        if not html: return []
+        
         soup = BeautifulSoup(html, "html.parser")
-        schedule = {}
-        # ... (ждем твой код парсинга таблицы)
-        return schedule
-
-    async def close(self):
-        if self._session:
-            await self._session.close()
+        lessons = []
+        # Тут должна быть твоя логика парсинга таблицы <table>
+        # Для примера вернем пустой список, если таблица не найдена
+        return lessons

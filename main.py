@@ -1,53 +1,68 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import logging
 import threading
 from datetime import datetime
 from flask import Flask, send_from_directory, jsonify, request
-import requests as req
 import pytz
-import asyncio
 
-from parser import HerzenParser
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ===== CONFIG =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 TZ = pytz.timezone("Europe/Moscow")
 PORT = int(os.environ.get("PORT", 8080))
 API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# ===== STORAGE =====
 user_groups: dict = {}
 
 def save_users():
-    with open("users.json", "w") as f:
+    with open("users.json", "w", encoding="utf-8") as f:
         json.dump(user_groups, f, ensure_ascii=False)
 
 def load_users():
     global user_groups
     if os.path.exists("users.json"):
-        with open("users.json") as f:
+        with open("users.json", encoding="utf-8") as f:
             data = json.load(f)
             user_groups = {int(k): v for k, v in data.items()}
 
 load_users()
 
-# ===== TELEGRAM HELPERS =====
+import urllib.request
+import urllib.parse
+
 def send_message(chat_id, text, keyboard=None):
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if keyboard:
-        payload["reply_markup"] = json.dumps(keyboard, ensure_ascii=False)
-    req.post(f"{API}/sendMessage", json=payload, headers={"Content-Type": "application/json; charset=utf-8"})
-
-def answer_callback(callback_id, text=""):
-    req.post(f"{API}/answerCallbackQuery", json={"callback_query_id": callback_id, "text": text})
+        payload["reply_markup"] = keyboard
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"{API}/sendMessage",
+        data=data,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST"
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        logger.error(f"send_message error: {e}")
 
 def set_webhook(url):
-    req.post(f"{API}/setWebhook", json={"url": url, "drop_pending_updates": True})
+    payload = json.dumps({"url": url, "drop_pending_updates": True}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{API}/setWebhook",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        logger.info(f"Webhook set: {url}")
+    except Exception as e:
+        logger.error(f"set_webhook error: {e}")
 
 def open_webapp_keyboard():
     return {
@@ -57,8 +72,8 @@ def open_webapp_keyboard():
         }]]
     }
 
-# ===== FLASK APP =====
 flask_app = Flask(__name__, static_folder="webapp")
+flask_app.config["JSON_AS_ASCII"] = False
 
 @flask_app.route("/")
 def index():
@@ -66,14 +81,20 @@ def index():
 
 @flask_app.route("/api/groups")
 def api_groups():
+    import asyncio
+    from parser import HerzenParser
     loop = asyncio.new_event_loop()
-    parser = HerzenParser()
-    groups = loop.run_until_complete(parser.get_all_groups())
+    groups = loop.run_until_complete(HerzenParser().get_all_groups())
     loop.close()
-    return jsonify({"groups": groups})
+    return flask_app.response_class(
+        json.dumps({"groups": groups}, ensure_ascii=False),
+        mimetype="application/json"
+    )
 
 @flask_app.route("/api/schedule")
 def api_schedule():
+    import asyncio
+    from parser import HerzenParser
     group_id = request.args.get("group_id", type=int)
     date_str = request.args.get("date")
     if not group_id or not date_str:
@@ -83,13 +104,17 @@ def api_schedule():
     except Exception:
         return jsonify({"error": "bad date"}), 400
     loop = asyncio.new_event_loop()
-    parser = HerzenParser()
-    lessons = loop.run_until_complete(parser.get_schedule_for_date(group_id, target))
+    lessons = loop.run_until_complete(HerzenParser().get_schedule_for_date(group_id, target))
     loop.close()
-    return jsonify({"lessons": lessons})
+    return flask_app.response_class(
+        json.dumps({"lessons": lessons}, ensure_ascii=False),
+        mimetype="application/json"
+    )
 
 @flask_app.route("/api/schedule/week")
 def api_schedule_week():
+    import asyncio
+    from parser import HerzenParser
     group_id = request.args.get("group_id", type=int)
     date_str = request.args.get("date")
     if not group_id or not date_str:
@@ -99,24 +124,24 @@ def api_schedule_week():
     except Exception:
         return jsonify({"error": "bad date"}), 400
     loop = asyncio.new_event_loop()
-    parser = HerzenParser()
-    week = loop.run_until_complete(parser.get_schedule_week(group_id, target))
+    week = loop.run_until_complete(HerzenParser().get_schedule_week(group_id, target))
     loop.close()
-    return jsonify({"week": week})
+    return flask_app.response_class(
+        json.dumps({"week": week}, ensure_ascii=False),
+        mimetype="application/json"
+    )
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.json
+    data = request.get_json(force=True)
     if not data:
         return "ok"
 
-    # Обычное сообщение
     if "message" in data:
         msg = data["message"]
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
 
-        # WebApp data
         if "web_app_data" in msg:
             try:
                 wa = json.loads(msg["web_app_data"]["data"])
@@ -144,17 +169,15 @@ def webhook():
             name = user_groups.get(chat_id, {}).get("group_name", "не выбрана")
             send_message(
                 chat_id,
-                f"👋 Привет! Я бот расписания РГПУ им. Герцена.\n\n"
-                f"Твоя группа: <b>{name}</b>\n\n"
-                f"Нажми кнопку ниже 👇",
+                f"👋 Привет! Я бот расписания РГПУ им. Герцена.\n\nТвоя группа: <b>{name}</b>\n\nНажми кнопку ниже 👇",
                 keyboard=open_webapp_keyboard()
             )
 
     return "ok"
 
-# ===== SCHEDULER =====
 def run_scheduler():
-    import time
+    import time, asyncio
+    from parser import HerzenParser
     notified = set()
     while True:
         try:
@@ -165,10 +188,8 @@ def run_scheduler():
                     continue
                 group_id = data["group_id"]
                 loop = asyncio.new_event_loop()
-                parser = HerzenParser()
-                lessons = loop.run_until_complete(parser.get_schedule_for_date(group_id, now.date()))
+                lessons = loop.run_until_complete(HerzenParser().get_schedule_for_date(group_id, now.date()))
                 loop.close()
-
                 for lesson in lessons:
                     key = (user_id, str(now.date()), lesson["time_start"])
                     if key in notified:
@@ -181,11 +202,7 @@ def run_scheduler():
                     diff = (lesson_dt - now).total_seconds() / 60
                     if 0 < diff <= 15:
                         notified.add(key)
-                        text = (
-                            f"🔔 <b>Через {int(diff)} мин — пара!</b>\n\n"
-                            f"📚 {lesson['subject']}\n"
-                            f"⏰ {lesson['time_start']} – {lesson['time_end']}\n"
-                        )
+                        text = f"🔔 <b>Через {int(diff)} мин — пара!</b>\n\n📚 {lesson['subject']}\n⏰ {lesson['time_start']} – {lesson['time_end']}\n"
                         if lesson.get("room"):
                             text += f"🏛 {lesson['room']}\n"
                         if lesson.get("teacher"):
@@ -196,18 +213,9 @@ def run_scheduler():
             logger.error(f"scheduler error: {e}")
         time.sleep(60)
 
-# ===== MAIN =====
 if __name__ == "__main__":
-    # Установить webhook
     if WEBAPP_URL:
-        webhook_url = WEBAPP_URL.rstrip("/") + "/webhook"
-        set_webhook(webhook_url)
-        logger.info(f"Webhook set: {webhook_url}")
-
-    # Запуск планировщика в фоне
-    t = threading.Thread(target=run_scheduler, daemon=True)
-    t.start()
-
-    # Запуск Flask
+        set_webhook(WEBAPP_URL.rstrip("/") + "/webhook")
+    threading.Thread(target=run_scheduler, daemon=True).start()
     flask_app.run(host="0.0.0.0", port=PORT)
-                
+    

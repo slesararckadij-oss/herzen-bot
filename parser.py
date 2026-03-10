@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 import aiohttp
 from bs4 import BeautifulSoup
-from datetime import date, datetime
-import re
 import logging
+import re
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -27,50 +28,32 @@ RU_WEEKDAY = {
     "суббота": 5,
 }
 
-
 class HerzenParser:
-    def __init__(self):
-        self.session = None
-
-    async def _get(self, url: str) -> str:
+    async def _get(self, url: str):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
                 return await r.text(encoding="utf-8")
 
-    async def get_all_groups(self) -> list[dict]:
-        """Получить все группы РГПУ (рабочая версия)"""
+    async def get_all_groups(self):
+        """Получает все группы Герцена с сайта"""
         try:
-            url = f"{BASE_URL}/schedule"
-            html = await self._get(url)
-
+            html = await self._get(f"{BASE_URL}/schedule")
             soup = BeautifulSoup(html, "html.parser")
-
             groups = []
 
-            for link in soup.find_all("a", href=True):
-                href = link["href"]
-                if "id_group=" in href:
-                    try:
-                        group_id = int(href.split("id_group=")[1].split("&")[0])
-                    except:
-                        continue
-                    name = link.get_text(strip=True)
-                    if name and len(name) > 2:
-                        groups.append({"id": group_id, "name": name})
-
-            # убрать дубликаты
-            unique = {}
-            for g in groups:
-                unique[g["id"]] = g
-
-            return list(unique.values())
-
+            # На сайте группы лежат в <select name="group"> или <option>
+            for opt in soup.find_all("option"):
+                val = opt.get("value")
+                name = opt.get_text(strip=True)
+                if val and val.isdigit() and name:
+                    groups.append({"id": int(val), "name": name})
+            return groups
         except Exception as e:
             logger.error(f"get_all_groups error: {e}")
             return []
 
     async def get_schedule_week(self, group_id: int, week_start: date) -> dict:
-        """Получить расписание на неделю"""
+        """Расписание на неделю"""
         try:
             url = f"{BASE_URL}/static/schedule_view.php?id_group={group_id}&sem=1"
             html = await self._get(url)
@@ -79,32 +62,29 @@ class HerzenParser:
             logger.error(f"get_schedule_week error: {e}")
             return {}
 
-    async def get_schedule_for_date(self, group_id: int, target_date: date) -> list:
-        """Получить расписание на конкретную дату"""
+    async def get_schedule_for_date(self, group_id: int, target_date: date):
         week_data = await self.get_schedule_week(group_id, target_date)
         day_key = WEEKDAY_MAP.get(target_date.weekday(), "sunday")
         return week_data.get(day_key, [])
 
     def _parse_schedule_html(self, html: str, ref_date: date) -> dict:
-        """Парсит HTML страницы расписания"""
+        """Парсинг HTML таблицы расписания"""
+        from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
         schedule = {}
-        current_day = None
-        table = soup.find("table", class_=re.compile(r"schedule|rasp", re.I))
+        table = soup.find("table")
         if not table:
-            table = soup.find("table")
-        if not table:
-            return self._parse_blocks(soup)
+            return {}
 
-        rows = table.find_all("tr")
-        for row in rows:
+        current_day = None
+        for row in table.find_all("tr"):
             cells = row.find_all(["td", "th"])
             if not cells:
                 continue
             row_text = row.get_text(" ", strip=True).lower()
             for day_ru, day_idx in RU_WEEKDAY.items():
                 if day_ru in row_text and len(row_text) < 30:
-                    current_day = WEEKDAY_MAP[day_idx]
+                    current_day = list(WEEKDAY_MAP.values())[day_idx]
                     if current_day not in schedule:
                         schedule[current_day] = []
                     break
@@ -115,66 +95,23 @@ class HerzenParser:
                         schedule[current_day].append(lesson)
         return schedule
 
-    def _parse_blocks(self, soup: BeautifulSoup) -> dict:
-        """Альтернативный парсер для блочной верстки"""
-        schedule = {}
-        current_day = None
-        for tag in soup.find_all(["div", "p", "h3", "h4", "tr", "td"]):
-            text = tag.get_text(" ", strip=True).lower()
-            for day_ru, day_idx in RU_WEEKDAY.items():
-                if day_ru in text and len(text) < 40:
-                    current_day = WEEKDAY_MAP[day_idx]
-                    if current_day not in schedule:
-                        schedule[current_day] = []
-                    break
-            if current_day and re.search(r"\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}", text):
-                lesson = self._extract_lesson_from_text(tag.get_text(" ", strip=True))
-                if lesson and lesson not in schedule[current_day]:
-                    schedule[current_day].append(lesson)
-        return schedule
-
-    def _parse_row(self, cells: list) -> dict | None:
+    def _parse_row(self, cells):
         texts = [c.get_text(" ", strip=True) for c in cells]
         full = " ".join(texts)
-        return self._extract_lesson_from_text(full)
-
-    def _extract_lesson_from_text(self, text: str) -> dict | None:
-        time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", text)
-        if not time_match:
+        match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", full)
+        if not match:
             return None
-        time_start, time_end = time_match.group(1), time_match.group(2)
-
+        time_start, time_end = match.groups()
         lesson_type = "Занятие"
         for t in ["Лекция", "Практика", "Семинар", "Лаб"]:
-            if t.lower() in text.lower():
+            if t.lower() in full.lower():
                 lesson_type = t
                 break
-
-        is_remote = any(w in text.lower() for w in ["дистанц", "видеолекц", "онлайн"])
-
-        clean = re.sub(r"\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}", "", text).strip()
-        clean = re.sub(r"\s+", " ", clean)
-
-        room_match = re.search(r"ауд[.\s]*(\S+)", clean, re.I)
-        room = room_match.group(0) if room_match else ""
-
-        corp_match = re.search(r"корпус\s+\d+[^,)]*", clean, re.I)
-        if corp_match and room:
-            room = corp_match.group(0) + ", " + room
-
-        teacher_match = re.search(r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)", clean)
+        subject = re.sub(r"\d{1,2}:\d{2}", "", full).strip()
+        teacher_match = re.search(r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)", full)
         teacher = teacher_match.group(1) if teacher_match else ""
-
-        subject = clean
-        for rm in [room, teacher, "Лекция", "Практика", "Семинар", "Лаб", "дистанционное обучение", "видеолекция"]:
-            if rm:
-                subject = subject.replace(rm, "")
-        subject = re.sub(r"\[.*?\]", "", subject)
-        subject = re.sub(r"\s+", " ", subject).strip(" ,;")
-
-        if len(subject) < 3:
-            return None
-
+        room_match = re.search(r"ауд[.\s]*(\S+)", full, re.I)
+        room = room_match.group(0) if room_match else ""
         return {
             "time_start": time_start,
             "time_end": time_end,
@@ -182,5 +119,4 @@ class HerzenParser:
             "type": lesson_type,
             "teacher": teacher,
             "room": room,
-            "is_remote": is_remote,
         }

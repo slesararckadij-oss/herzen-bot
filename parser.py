@@ -38,31 +38,36 @@ class HerzenParser:
                 return await r.text(encoding="utf-8")
 
     async def get_all_groups(self) -> list[dict]:
-        """Получить все группы с сайта"""
-        try:
-            html = await self._get(f"{BASE_URL}/schedule")
-            soup = BeautifulSoup(html, "html.parser")
-            groups = []
-            # Ищем ссылки на группы
-            for link in soup.find_all("a", href=True):
-                href = link["href"]
-                match = re.search(r"id_group=(\d+)", href)
-                if match:
-                    group_id = int(match.group(1))
-                    name = link.get_text(strip=True)
-                    if name and len(name) > 1:
-                        groups.append({"id": group_id, "name": name})
-            # Убираем дубликаты
-            seen = set()
-            unique = []
-            for g in groups:
-                if g["id"] not in seen:
-                    seen.add(g["id"])
-                    unique.append(g)
-            return unique
-        except Exception as e:
-            logger.error(f"get_all_groups error: {e}")
+    async def get_all_groups(self) -> list[dict]:
+    """Получить список групп РГПУ"""
+    try:
+        url = f"{BASE_URL}/static/schedule_view.php"
+        html = await self._get(url)
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        groups = []
+
+        # ищем select с группами
+        select = soup.find("select", {"name": "id_group"})
+        if not select:
             return []
+
+        for option in select.find_all("option"):
+            value = option.get("value")
+            name = option.get_text(strip=True)
+
+            if value and value.isdigit() and name:
+                groups.append({
+                    "id": int(value),
+                    "name": name
+                })
+
+        return groups
+
+    except Exception as e:
+        logger.error(f"get_all_groups error: {e}")
+        return []
 
     async def get_schedule_week(self, group_id: int, week_start: date) -> dict:
         """Получить расписание на неделю"""

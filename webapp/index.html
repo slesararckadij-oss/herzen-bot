@@ -3,58 +3,73 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Выбор группы</title>
+<title>Расписание РГПУ им. Герцена</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-button { margin: 5px 0; padding: 8px 12px; font-size: 16px; }
-#groups { max-height: 400px; overflow-y: auto; margin-top: 10px; }
+body { font-family: Arial, sans-serif; background: #f0f2f5; margin:0; padding:0; }
+.header { display:flex; justify-content: space-between; align-items: center; padding: 15px; background:#4a76a8; color:#fff; }
+.container { padding: 20px; max-width: 800px; margin:auto; }
+.button { padding: 10px 15px; margin:5px; background:#4a76a8; color:#fff; border:none; border-radius:5px; cursor:pointer; }
+.button:hover { background:#365a85; }
+.lesson { background:#fff; padding:10px; margin:5px 0; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+.lesson span { display:block; }
 </style>
 </head>
 <body>
-<h2>Выберите группу</h2>
-<div id="loading">Загрузка...</div>
-<div id="groups"></div>
+<div class="header">
+  <div>📅 <b id="current-date">Сегодня</b></div>
+  <div>
+    <button class="button" id="prev-day">← Вчера</button>
+    <button class="button" id="next-day">Завтра →</button>
+  </div>
+</div>
+<div class="container">
+  <select id="group-select">
+    <option value="">Выберите группу</option>
+  </select>
+  <div id="lessons"></div>
+</div>
 
 <script>
-const groupsDiv = document.getElementById("groups");
-const loadingDiv = document.getElementById("loading");
+const API_BASE = "/api";
 
-async function loadGroups() {
-    try {
-        const res = await fetch("/api/groups");
-        const data = await res.json();
-        const groups = data.groups || [];
-
-        if (!groups.length) {
-            loadingDiv.textContent = "Группы не найдены";
-            return;
-        }
-
-        loadingDiv.style.display = "none";
-        groups.forEach(g => {
-            const btn = document.createElement("button");
-            btn.textContent = g.name;
-            btn.onclick = () => selectGroup(g);
-            groupsDiv.appendChild(btn);
-        });
-    } catch (err) {
-        console.error(err);
-        loadingDiv.textContent = "Ошибка загрузки групп";
-    }
+async function loadGroups(){
+    const res = await fetch(`${API_BASE}/groups`);
+    const data = await res.json();
+    const sel = document.getElementById("group-select");
+    data.groups.forEach(g=>{
+        let opt = document.createElement("option");
+        opt.value=g.id; opt.text=g.name;
+        sel.add(opt);
+    });
 }
 
-function selectGroup(group) {
-    if (window.Telegram?.WebApp) {
-        Telegram.WebApp.sendData(JSON.stringify({
-            action: "set_group",
-            group_id: group.id,
-            group_name: group.name
-        }));
-        alert(`Группа ${group.name} выбрана!`);
-    } else {
-        alert("Ошибка: Telegram WebApp недоступен");
-    }
+let currentDate = new Date();
+function formatDate(d){
+    return d.toISOString().split("T")[0];
 }
+
+async function loadSchedule(){
+    const groupId = document.getElementById("group-select").value;
+    if(!groupId) return;
+    const res = await fetch(`${API_BASE}/schedule?group_id=${groupId}&date=${formatDate(currentDate)}`);
+    const data = await res.json();
+    const container = document.getElementById("lessons");
+    container.innerHTML="";
+    if(data.lessons.length===0){
+        container.innerHTML="<p>Пар нет</p>";
+        return;
+    }
+    data.lessons.forEach(l=>{
+        const div = document.createElement("div");
+        div.className="lesson";
+        div.innerHTML=`<b>${l.time_start} - ${l.time_end}</b> | ${l.subject}<br>${l.type} ${l.teacher} ${l.room}`;
+        container.appendChild(div);
+    });
+}
+
+document.getElementById("group-select").addEventListener("change", loadSchedule);
+document.getElementById("prev-day").addEventListener("click", ()=>{currentDate.setDate(currentDate.getDate()-1); loadSchedule();});
+document.getElementById("next-day").addEventListener("click", ()=>{currentDate.setDate(currentDate.getDate()+1); loadSchedule();});
 
 loadGroups();
 </script>

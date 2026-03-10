@@ -3,237 +3,60 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Расписание</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-
+<title>Выбор группы</title>
 <style>
-
-body{
-font-family:sans-serif;
-background:#0f0f0f;
-color:white;
-margin:0;
-}
-
-.header{
-display:flex;
-justify-content:space-between;
-align-items:center;
-padding:14px;
-border-bottom:1px solid #2a2a2a;
-}
-
-.group-btn{
-background:#1a1a1a;
-padding:8px 14px;
-border-radius:12px;
-cursor:pointer;
-}
-
-.main{
-padding:16px;
-}
-
-.card{
-background:#1a1a1a;
-border-radius:12px;
-padding:12px;
-margin-bottom:10px;
-}
-
-.time{
-color:#4d9fff;
-font-weight:bold;
-}
-
-.group-item{
-background:#1a1a1a;
-padding:12px;
-border-radius:10px;
-margin-bottom:8px;
-cursor:pointer;
-}
-
-.loading{
-text-align:center;
-margin-top:40px;
-color:#aaa;
-}
-
+body { font-family: Arial, sans-serif; padding: 20px; }
+button { margin: 5px 0; padding: 8px 12px; font-size: 16px; }
+#groups { max-height: 400px; overflow-y: auto; margin-top: 10px; }
 </style>
 </head>
-
 <body>
-
-<div class="header">
-<div class="group-btn" onclick="openGroupList()" id="groupName">Выбери группу</div>
-<div onclick="toggleNotify()">🔔</div>
-</div>
-
-<div class="main" id="main">
-<div class="loading">Загрузка...</div>
-</div>
+<h2>Выберите группу</h2>
+<div id="loading">Загрузка...</div>
+<div id="groups"></div>
 
 <script>
+const groupsDiv = document.getElementById("groups");
+const loadingDiv = document.getElementById("loading");
 
-const tg = window.Telegram?.WebApp
-if(tg){tg.ready();tg.expand()}
+async function loadGroups() {
+    try {
+        const res = await fetch("/api/groups");
+        const data = await res.json();
+        const groups = data.groups || [];
 
-let state={
-groupId:localStorage.getItem("groupId"),
-groupName:localStorage.getItem("groupName"),
-notify:localStorage.getItem("notify")!=="false"
+        if (!groups.length) {
+            loadingDiv.textContent = "Группы не найдены";
+            return;
+        }
+
+        loadingDiv.style.display = "none";
+        groups.forEach(g => {
+            const btn = document.createElement("button");
+            btn.textContent = g.name;
+            btn.onclick = () => selectGroup(g);
+            groupsDiv.appendChild(btn);
+        });
+    } catch (err) {
+        console.error(err);
+        loadingDiv.textContent = "Ошибка загрузки групп";
+    }
 }
 
-if(state.groupName){
-document.getElementById("groupName").innerText=state.groupName
-loadToday()
-}else{
-showHello()
+function selectGroup(group) {
+    if (window.Telegram?.WebApp) {
+        Telegram.WebApp.sendData(JSON.stringify({
+            action: "set_group",
+            group_id: group.id,
+            group_name: group.name
+        }));
+        alert(`Группа ${group.name} выбрана!`);
+    } else {
+        alert("Ошибка: Telegram WebApp недоступен");
+    }
 }
 
-function showHello(){
-document.getElementById("main").innerHTML=
-`
-<div style="text-align:center;margin-top:80px">
-<div style="font-size:50px">👋</div>
-<h2>Привет</h2>
-<p style="color:#aaa">Сначала выбери группу</p>
-</div>
-`
-}
-
-function showLoading(){
-document.getElementById("main").innerHTML='<div class="loading">Загрузка...</div>'
-}
-
-async function openGroupList(){
-
-showLoading()
-
-try{
-
-let r=await fetch("/api/groups")
-let data=await r.json()
-
-let groups=data.groups||[]
-
-let html="<h3>Выбери группу</h3>"
-
-for(let g of groups){
-
-let id=g.id||g.group_id
-let name=g.name||g.group_name
-
-html+=`
-<div class="group-item" onclick="selectGroup('${id}','${name}')">
-${name}
-</div>
-`
-
-}
-
-document.getElementById("main").innerHTML=html
-
-}catch(e){
-
-document.getElementById("main").innerHTML="Ошибка загрузки групп"
-
-}
-
-}
-
-function selectGroup(id,name){
-
-state.groupId=id
-state.groupName=name
-
-localStorage.setItem("groupId",id)
-localStorage.setItem("groupName",name)
-
-document.getElementById("groupName").innerText=name
-
-if(tg){
-tg.sendData(JSON.stringify({
-action:"set_group",
-group_id:id,
-group_name:name
-}))
-}
-
-loadToday()
-
-}
-
-async function loadToday(){
-
-showLoading()
-
-let d=new Date()
-let date=d.toISOString().slice(0,10)
-
-try{
-
-let r=await fetch(`/api/schedule?group_id=${state.groupId}&date=${date}`)
-let data=await r.json()
-
-renderLessons(data.lessons||[])
-
-}catch(e){
-
-document.getElementById("main").innerHTML="Ошибка загрузки расписания"
-
-}
-
-}
-
-function renderLessons(list){
-
-if(!list.length){
-document.getElementById("main").innerHTML="<h3>Сегодня пар нет 🎉</h3>"
-return
-}
-
-let html=""
-
-for(let l of list){
-
-html+=`
-<div class="card">
-
-<div class="time">${l.time_start} — ${l.time_end}</div>
-
-<div><b>${l.subject}</b></div>
-
-${l.teacher?`<div>👤 ${l.teacher}</div>`:""}
-
-${l.room?`<div>🏛 ${l.room}</div>`:""}
-
-</div>
-`
-
-}
-
-document.getElementById("main").innerHTML=html
-
-}
-
-function toggleNotify(){
-
-state.notify=!state.notify
-
-localStorage.setItem("notify",state.notify)
-
-if(tg){
-tg.sendData(JSON.stringify({
-action:"toggle_notify",
-notify:state.notify
-}))
-}
-
-}
-
+loadGroups();
 </script>
-
 </body>
 </html>

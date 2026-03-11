@@ -18,6 +18,7 @@ class HerzenParser:
         }
 
     async def _get(self, url: str) -> str:
+        """Запрос с гарантированным закрытием сессии"""
         async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
                 async with session.get(url, timeout=15) as r:
@@ -41,21 +42,19 @@ class HerzenParser:
         return groups
 
     async def get_schedule_for_date(self, group_id, target_date) -> list:
-        # Фикс ошибки 'str' object has no attribute 'strftime'
-        if isinstance(target_date, str):
-            date_str = target_date
-        else:
-            date_str = target_date.strftime("%Y-%m-%d")
+        """Обработка ошибки strftime и поиск пар через HTML fallback"""
+        # Фикс: если пришла строка, не мучаем её форматированием
+        date_str = target_date if isinstance(target_date, str) else target_date.strftime("%Y-%m-%d")
         
         html = await self._get(f"{BASE_URL}/schedule/{group_id}/classes")
         if not html: return []
 
-        # 1. Пробуем JSON снапшот
+        # 1. Сначала ищем в JSON (Livewire)
         lessons = self._extract_from_snapshot(html, date_str)
         
-        # 2. Если пусто — агрессивно парсим HTML
+        # 2. Если JSON пуст, ищем в HTML (важно для твоего случая)
         if not lessons:
-            logger.info(f"Fallback to HTML for {date_str}")
+            logger.info(f"JSON snapshot empty for {date_str}, using HTML fallback")
             lessons = self._fallback_parse_html(html, date_str)
 
         return lessons
@@ -72,6 +71,7 @@ class HerzenParser:
                 for item in items:
                     if not isinstance(item, dict): continue
                     raw_d = item.get("SCHEDULE_DATE", "")
+                    # Приведение даты к YYYY-MM-DD
                     norm_d = raw_d[:10] if "-" in raw_d else f"{raw_d[6:10]}-{raw_d[3:5]}-{raw_d[0:2]}"
                     if norm_d == target_date_str:
                         teacher = item.get("ROWS", [{}])[0].get("TEACHER_NAME", "") if item.get("ROWS") else ""
@@ -89,22 +89,27 @@ class HerzenParser:
         except: return []
 
     def _fallback_parse_html(self, html: str, target_date_str: str) -> list:
+        """Поиск пар прямо в тексте страницы по дате DD.MM.YYYY"""
         soup = BeautifulSoup(html, "html.parser")
         site_date = f"{target_date_str[8:10]}.{target_date_str[5:7]}.{target_date_str[0:4]}"
         lessons = []
+        # Ищем дату в тексте
         date_node = soup.find(string=re.compile(site_date))
         if not date_node: return []
+        
         container = date_node.find_parent(["div", "section", "li", "ol"]) or soup
         for li in container.find_all("li"):
             text = li.get_text(" ", strip=True)
             times = re.findall(r"\d{1,2}:\d{2}", text)
             if not times: continue
+            
             moodle = li.find("a", href=re.compile(r"moodle"))
             t_link = li.find("a", href=re.compile(r"teachers|atlas"))
+            
             lessons.append({
                 "time_start": times[0],
                 "time_end": times[1] if len(times) > 1 else "",
-                "subject": text.split(times[-1])[-1].replace("Занятие", "").strip() or "Занятие",
+                "subject": text.split(times[-1])[-1].replace("Занятие", "").strip() or "Предмет",
                 "type": "Занятие",
                 "teacher": t_link.get_text(strip=True) if t_link else "",
                 "moodle_url": moodle["href"] if moodle else "",

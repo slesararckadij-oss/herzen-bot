@@ -10,8 +10,7 @@ BASE_URL = "https://guide.herzen.spb.ru"
 class HerzenParser:
     def __init__(self):
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
 
     async def _get(self, url: str) -> str:
@@ -25,90 +24,83 @@ class HerzenParser:
                 return ""
 
     async def get_all_groups(self) -> list:
-        # Берем список групп с главной страницы расписания
-        html = await self._get(f"{BASE_URL}/static/schedule.php")
-        if not html: return []
+        # Пытаемся взять с новой страницы расписания, там меньше шансов поймать 404
+        html = await self._get(f"{BASE_URL}/schedule/")
+        if not html: html = await self._get(f"{BASE_URL}/static/schedule.php")
+        
         soup = BeautifulSoup(html, "html.parser")
         groups, seen = [], set()
-        # Ищем все ссылки, которые ведут на конкретные группы
-        for a in soup.find_all("a", href=re.compile(r"id_group=\d+")):
-            m = re.search(r"id_group=(\d+)", a["href"])
-            if m and (name := a.get_text(strip=True)):
-                g_id = m.group(1)
-                if g_id not in seen:
-                    seen.add(g_id)
-                    groups.append({"id": g_id, "name": name})
+        for a in soup.find_all("a", href=re.compile(r"id_group=(\d+)")):
+            g_id = re.search(r"id_group=(\d+)", a["href"]).group(1)
+            name = a.get_text(strip=True)
+            if g_id not in seen and name:
+                seen.add(g_id)
+                groups.append({"id": g_id, "name": name})
         return sorted(groups, key=lambda x: x['name'])
 
     async def get_schedule_for_date(self, group_id, target_date) -> list:
-        date_str = target_date if isinstance(target_date, str) else target_date.strftime("%Y-%m-%d")
-        # Переходим в раздел по датам
+        # Формируем URL для просмотра по датам
         html = await self._get(f"{BASE_URL}/schedule/{group_id}/by-dates")
         if not html: return []
 
         # Формат даты на сайте: DD.MM.YYYY
-        site_date = f"{date_str[8:10]}.{date_str[5:7]}.{date_str[:4]}"
+        day, month, year = target_date.split('-')[2], target_date.split('-')[1], target_date.split('-')[0]
+        site_date = f"{day}.{month}.{year}"
+        
         soup = BeautifulSoup(html, "html.parser")
         
-        # Ищем текст с датой
-        date_element = soup.find(string=re.compile(re.escape(site_date)))
-        if not date_element: return []
+        # Ищем заголовок дня
+        day_header = soup.find(string=re.compile(re.escape(site_date)))
+        if not day_header: return []
 
-        # Находим контейнер дня
-        day_container = date_element.find_parent(["div", "section", "li", "td", "tr"])
-        # Поднимаемся чуть выше, чтобы захватить весь список пар этого дня
-        for _ in range(4):
-            if day_container:
-                # Если нашли тег, внутри которого есть список (ul/ol) или много div - это наш блок
-                if day_container.find_all(["li", "tr"]): break
-                day_container = day_container.parent
-        
-        if not day_container: return []
+        # Ищем ближайший контейнер с парами (обычно следующий за заголовком или родительский)
+        parent = day_header.find_parent(["div", "li", "tr", "section"])
+        # Ищем список пар после этой даты до следующей даты
+        lessons_raw = []
+        sibling = parent.find_next_sibling()
+        while sibling and not any(char.isdigit() for char in sibling.get_text()[:10] if char == '.'):
+            lessons_raw.append(sibling)
+            sibling = sibling.find_next_sibling()
+            if not sibling or len(lessons_raw) > 20: break
 
         lessons = []
-        # Ищем строки с парами
-        for item in day_container.find_all(["li", "tr", "div"], recursive=True):
-            text = item.get_text(" ", strip=True)
-            time_match = re.search(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})", text)
-            
-            if time_match and len(text) > 10:
-                t_start, t_end = time_match.groups()
-                
-                # Поиск ссылок
-                moodle_a = item.find("a", href=re.compile(r"moodle|clms"))
-                teacher_a = item.find("a", href=re.compile(r"atlas|teacher"))
-                
-                # Чистим название предмета
-                sub_text = text.replace(time_match.group(0), "").strip()
-                sub_text = re.sub(r"^\d+\.", "", sub_text).strip() # Удаляем номер пары
-                
-                # Отделяем предмет от аудитории
-                subject = sub_text.split("ауд.")[0].split("лекц")[0].split("практ")[0].strip()
-                subject = subject.replace("()", "").strip()
+        # Парсим накопленные блоки
+        search_area = [parent] + lessons_raw
+        for area in search_area:
+            for item in area.find_all(["div", "li"], recursive=True):
+                text = item.get_text(" ", strip=True)
+                time_match = re.search(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})", text)
+                if time_match and len(text) > 15:
+                    t_start, t_end = time_match.groups()
+                    
+                    # Извлекаем данные
+                    moodle = item.find("a", href=re.compile(r"moodle|clms"))
+                    teacher = item.find("a", href=re.compile(r"atlas|teacher"))
+                    
+                    # Чистим название (убираем время и номер пары)
+                    cleaned = text.replace(time_match.group(0), "").strip()
+                    cleaned = re.sub(r"^\d+\.", "", cleaned).strip()
+                    
+                    subject = cleaned.split("ауд.")[0].split("лекц")[0].split("практ")[0].strip()
+                    room = "ауд. " + cleaned.split("ауд.")[-1].split(",")[0].strip() if "ауд." in cleaned else "—"
 
-                if not subject or len(subject) < 3: continue
+                    lessons.append({
+                        "time_start": t_start,
+                        "time_end": t_end,
+                        "subject": subject or "Дисциплина",
+                        "type": "Лекция" if "лекц" in text.lower() else ("Практика" if "практ" in text.lower() else "Занятие"),
+                        "teacher": teacher.get_text(strip=True) if teacher else "Не указан",
+                        "teacher_url": f"{BASE_URL}{teacher['href']}" if teacher else "",
+                        "room": room,
+                        "moodle_url": moodle["href"] if moodle else ""
+                    })
 
-                t_url = teacher_a["href"] if teacher_a else ""
-                if t_url and not t_url.startswith("http"):
-                    t_url = f"{BASE_URL}{t_url}"
-
-                lessons.append({
-                    "time_start": t_start,
-                    "time_end": t_end,
-                    "subject": subject,
-                    "type": "Лекция" if "лекц" in text.lower() else ("Практика" if "практ" in text.lower() else "Занятие"),
-                    "teacher": teacher_a.get_text(strip=True) if teacher_a else "Преподаватель не указан",
-                    "teacher_url": t_url,
-                    "room": "ауд. " + sub_text.split("ауд.")[-1].split(",")[0].strip() if "ауд." in sub_text else "—",
-                    "moodle_url": moodle_a["href"] if moodle_a else "",
-                })
-
-        # Убираем дубликаты
-        unique = []
-        seen = set()
+        # Фильтр дублей
+        final = []
+        seen_keys = set()
         for l in lessons:
-            k = f"{l['time_start']}-{l['subject']}"
-            if k not in seen:
-                seen.add(k)
-                unique.append(l)
-        return unique
+            key = f"{l['time_start']}-{l['subject']}"
+            if key not in seen_keys:
+                final.append(l)
+                seen_keys.add(key)
+        return final

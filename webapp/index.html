@@ -140,7 +140,32 @@
 
         /* ─── CONTENT ────────────────────────────────── */
         .content { padding: 0 14px; }
-        .date-label { font-size: 20px; font-weight: 800; margin: 16px 0 14px; text-transform: capitalize; color: var(--text); }
+        .date-label { font-size: 20px; font-weight: 800; margin: 16px 0 8px; text-transform: capitalize; color: var(--text); }
+
+        /* ─── СЧЁТЧИК ПАРА ОСТАЛОСЬ ─────────────────── */
+        .lessons-counter {
+            font-size: 13px;
+            color: var(--text-sec);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lessons-counter .counter-badge {
+            background: rgba(255,159,10,0.12);
+            border: 1px solid rgba(255,159,10,0.25);
+            color: var(--accent);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .lessons-counter .counter-badge.done {
+            background: rgba(34,197,94,0.1);
+            border-color: rgba(34,197,94,0.25);
+            color: #4ade80;
+        }
+
         .empty { text-align: center; padding: 60px 20px; color: var(--text-sec); font-size: 15px; line-height: 1.6; }
         .empty-icon { font-size: 40px; margin-bottom: 12px; }
 
@@ -153,7 +178,7 @@
             border: 1px solid var(--border);
             position: relative;
             overflow: hidden;
-            transition: transform 0.1s;
+            transition: transform 0.1s, opacity 0.2s;
         }
         .lesson-card::before {
             content: '';
@@ -161,6 +186,66 @@
             background: linear-gradient(to bottom, var(--accent), var(--accent2));
         }
         .lesson-card:active { transform: scale(0.99); }
+
+        /* Прошедшая пара */
+        .lesson-card.past {
+            opacity: 0.55;
+        }
+        .lesson-card.past::before {
+            background: var(--text-dim);
+        }
+        .lesson-card.past .lesson-time {
+            color: var(--text-sec);
+        }
+        .lesson-card.past .lesson-subject {
+            color: var(--text-sec);
+        }
+
+        /* Идущая сейчас пара */
+        .lesson-card.ongoing {
+            border-color: rgba(255,159,10,0.35);
+            background: rgba(255,159,10,0.04);
+        }
+        .lesson-card.ongoing::before {
+            background: linear-gradient(to bottom, var(--accent), var(--accent2));
+            width: 4px;
+        }
+
+        .past-badge {
+            position: absolute;
+            top: 12px; right: 12px;
+            background: rgba(63,63,70,0.6);
+            border-radius: 20px;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+        .ongoing-badge {
+            position: absolute;
+            top: 12px; right: 12px;
+            background: rgba(255,159,10,0.15);
+            border: 1px solid rgba(255,159,10,0.35);
+            border-radius: 20px;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: var(--accent);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .ongoing-dot {
+            width: 6px; height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
         .lesson-time { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.3px; margin-bottom: 6px; }
         .lesson-subject { font-size: 16px; font-weight: 700; line-height: 1.35; margin-bottom: 10px; color: var(--text); }
         .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -210,12 +295,8 @@
         .tab-content.active { display: block; }
 
         /* ─── REMINDER SETTINGS ──────────────────────── */
-        .settings-section {
-            padding: 16px 14px 0;
-        }
-        .settings-title {
-            font-size: 20px; font-weight: 800; margin-bottom: 16px; color: var(--text);
-        }
+        .settings-section { padding: 16px 14px 0; }
+        .settings-title { font-size: 20px; font-weight: 800; margin-bottom: 16px; color: var(--text); }
         .settings-card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -227,9 +308,7 @@
             font-size: 13px; font-weight: 700; color: var(--text-sec);
             text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
         }
-        .remind-options {
-            display: flex; flex-wrap: wrap; gap: 8px;
-        }
+        .remind-options { display: flex; flex-wrap: wrap; gap: 8px; }
         .remind-chip {
             padding: 8px 16px;
             background: var(--card2);
@@ -280,6 +359,16 @@
             line-height: 1.5;
             margin-bottom: 12px;
         }
+        .warn-box {
+            background: rgba(251,191,36,0.08);
+            border: 1px solid rgba(251,191,36,0.2);
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 13px;
+            color: #fcd34d;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
 
         /* Flatpickr */
         #datePicker { position: fixed; left: -9999px; top: -9999px; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
@@ -293,12 +382,10 @@
         span.flatpickr-weekday { color: var(--text-sec) !important; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
 </head>
 <body>
 
-<!-- ─── HEADER (только для вкладки расписания) ─── -->
+<!-- ─── HEADER ─── -->
 <div class="header" id="scheduleHeader">
     <div class="row">
         <div class="search-wrap">
@@ -325,6 +412,7 @@
 <div id="tab-schedule" class="tab-content active">
     <div class="content">
         <div id="currentDateLabel" class="date-label"></div>
+        <div id="lessonsCounter" class="lessons-counter" style="display:none;"></div>
         <div id="scheduleList"></div>
     </div>
 </div>
@@ -335,6 +423,9 @@
         <div class="settings-title">🔔 Напоминания</div>
         <div class="info-box">
             Бот пришлёт сообщение в Telegram до начала каждой пары. Выбери за сколько минут.
+        </div>
+        <div id="renderWarnBox" class="warn-box" style="display:none;">
+            ⚠️ <b>Важно:</b> На бесплатном плане Render сервис может засыпать. Напоминания работают только пока бот активен. Для надёжной работы рекомендуем платный план или UptimeRobot.
         </div>
         <div class="settings-card">
             <div class="settings-card-title">За сколько минут напомнить</div>
@@ -365,6 +456,8 @@
     </button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
 <script>
     // ─── TELEGRAM WEBAPP ─────────────────────────────
     const tg = window.Telegram?.WebApp;
@@ -378,6 +471,7 @@
     let selectedDateStr = todayStr();
     let weekOffset = 0;
     let selectedRemindMin = 15;
+    let clockInterval = null;
 
     const DAY_NAMES_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
     const MONTH_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -390,6 +484,11 @@
         document.getElementById('nav-' + name).classList.add('active');
         document.getElementById('scheduleHeader').style.display = name === 'schedule' ? 'flex' : 'none';
         document.body.style.paddingTop = name === 'schedule' ? '210px' : '0';
+
+        // Показываем предупреждение о Render в настройках
+        if (name === 'remind') {
+            document.getElementById('renderWarnBox').style.display = 'block';
+        }
     }
 
     // ─── UTILS ───────────────────────────────────────
@@ -411,24 +510,52 @@
         return new Date(today.getFullYear(), today.getMonth(), today.getDate() + diffToMon + weekOff * 7);
     }
 
+    // Получить текущее время в минутах от начала дня
+    function nowMinutes() {
+        const now = new Date();
+        return now.getHours() * 60 + now.getMinutes();
+    }
+
+    function timeToMinutes(t) {
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    }
+
+    // Является ли выбранная дата сегодняшней
+    function isToday() {
+        return selectedDateStr === todayStr();
+    }
+
     // ─── FLATPICKR ───────────────────────────────────
-    const fp = flatpickr("#datePicker", {
-        locale: "ru", dateFormat: "Y-m-d", disableMobile: true, appendTo: document.body,
-        onChange: (dates, str) => {
-            if (dates.length > 0) {
-                selectedDateStr = str;
-                const d = dates[0];
-                const dow = d.getDay();
-                const diffToMon = (dow === 0) ? -6 : 1 - dow;
-                const today = new Date();
-                const todayMon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((today.getDay()===0)?-6:1-today.getDay()));
-                const selMon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon);
-                weekOffset = Math.round((selMon - todayMon) / (7*86400000));
-                renderWeek(); loadSchedule();
+    let fp = null;
+
+    function initFlatpickr() {
+        fp = flatpickr("#datePicker", {
+            locale: "ru",
+            dateFormat: "Y-m-d",
+            disableMobile: true,
+            appendTo: document.body,
+            onChange: function(dates, str) {
+                if (dates.length > 0) {
+                    selectedDateStr = str;
+                    const d = dates[0];
+                    const dow = d.getDay();
+                    const diffToMon = (dow === 0) ? -6 : 1 - dow;
+                    const today = new Date();
+                    const todayMon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((today.getDay()===0)?-6:1-today.getDay()));
+                    const selMon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon);
+                    weekOffset = Math.round((selMon - todayMon) / (7*86400000));
+                    renderWeek();
+                    loadSchedule();
+                }
             }
-        }
+        });
+    }
+
+    document.getElementById('calendarBtn').addEventListener('click', function() {
+        if (!fp) initFlatpickr();
+        fp.open();
     });
-    document.getElementById('calendarBtn').onclick = () => fp.open();
 
     // ─── WEEK ────────────────────────────────────────
     function renderWeek() {
@@ -483,7 +610,11 @@
     }
     function filterGroups() {
         const val = document.getElementById('groupSearch').value.trim().toLowerCase();
-        if (!val) { renderGroups(allGroups); if (currentGroupId) document.getElementById('groupSelect').value = currentGroupId; return; }
+        if (!val) {
+            renderGroups(allGroups);
+            if (currentGroupId) document.getElementById('groupSelect').value = currentGroupId;
+            return;
+        }
         renderGroups(allGroups.filter(g => g.name.toLowerCase().includes(val)));
     }
     function onGroupChange(id) {
@@ -492,53 +623,147 @@
     }
 
     // ─── SCHEDULE ────────────────────────────────────
+    let cachedLessons = [];
+
     function typeClass(type) {
         if (type === 'Лекция')   return 'pill-lecture';
         if (type === 'Практика') return 'pill-practice';
         if (type === 'Семинар')  return 'pill-seminar';
         return 'pill-other';
     }
+
     function updateDateLabel() {
         const d = fromDateStr(selectedDateStr);
         const label = d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
         document.getElementById('currentDateLabel').textContent = label.charAt(0).toUpperCase() + label.slice(1);
     }
+
+    function renderLessons(lessons) {
+        const list = document.getElementById('scheduleList');
+        const counterEl = document.getElementById('lessonsCounter');
+
+        if (!lessons || lessons.length === 0) {
+            list.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div>Пар нет — можно отдыхать!</div>`;
+            counterEl.style.display = 'none';
+            return;
+        }
+
+        const nowMin = nowMinutes();
+        const checkingToday = isToday();
+
+        let pastCount = 0;
+        let ongoingCount = 0;
+        let upcomingCount = 0;
+
+        const html = lessons.map(l => {
+            const startMin = timeToMinutes(l.time_start);
+            const endMin = timeToMinutes(l.time_end);
+
+            let statusClass = '';
+            let badge = '';
+
+            if (checkingToday) {
+                if (nowMin >= endMin) {
+                    statusClass = 'past';
+                    badge = '<div class="past-badge">✓ Прошла</div>';
+                    pastCount++;
+                } else if (nowMin >= startMin && nowMin < endMin) {
+                    statusClass = 'ongoing';
+                    badge = '<div class="ongoing-badge"><div class="ongoing-dot"></div>Идёт сейчас</div>';
+                    ongoingCount++;
+                } else {
+                    upcomingCount++;
+                }
+            } else {
+                upcomingCount++;
+            }
+
+            const teacherHtml = l.teacher_url
+                ? `<a href="${l.teacher_url}" target="_blank" class="teacher-link">${l.teacher}</a>`
+                : l.teacher;
+
+            const footer = [];
+            if (l.moodle_url) footer.push(`<a href="${l.moodle_url}" target="_blank" class="moodle-btn">📖 Moodle</a>`);
+            if (l.note) footer.push(`<span class="note-text">📌 ${l.note}</span>`);
+            const footerHtml = footer.length ? `<div class="lesson-footer">${footer.join('')}</div>` : '';
+
+            return `
+            <div class="lesson-card ${statusClass}">
+                ${badge}
+                <div class="lesson-time">${l.time_start} — ${l.time_end}</div>
+                <div class="lesson-subject">${l.subject}</div>
+                <div class="pill-row"><span class="pill ${typeClass(l.type)}">${l.type}</span></div>
+                <div class="lesson-meta">
+                    <div class="meta-row"><span class="meta-icon">🏛️</span>${l.room}</div>
+                    <div class="meta-row"><span class="meta-icon">👤</span>${teacherHtml}</div>
+                </div>
+                ${footerHtml}
+            </div>`;
+        }).join('');
+
+        list.innerHTML = html;
+
+        // Показываем счётчик только для сегодняшнего дня
+        if (checkingToday) {
+            counterEl.style.display = 'flex';
+            if (upcomingCount + ongoingCount === 0) {
+                counterEl.innerHTML = `<span class="counter-badge done">✓ Все пары прошли</span> Отдыхай!`;
+            } else if (ongoingCount > 0) {
+                const remainingText = upcomingCount > 0 ? `, ещё ${upcomingCount} впереди` : '';
+                counterEl.innerHTML = `<span class="counter-badge">🔴 Идёт пара</span>${remainingText}`;
+            } else {
+                counterEl.innerHTML = `<span class="counter-badge">Осталось ${upcomingCount} ${plural(upcomingCount, 'пара', 'пары', 'пар')}</span>`;
+            }
+        } else {
+            counterEl.style.display = 'none';
+        }
+    }
+
+    function plural(n, one, few, many) {
+        const mod10 = n % 10;
+        const mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) return one;
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+        return many;
+    }
+
     async function loadSchedule() {
         updateDateLabel();
         const list = document.getElementById('scheduleList');
+        const counterEl = document.getElementById('lessonsCounter');
+
         if (!currentGroupId) {
             list.innerHTML = `<div class="empty"><div class="empty-icon">📚</div>Выберите группу выше</div>`;
+            counterEl.style.display = 'none';
+            cachedLessons = [];
             return;
         }
+
         list.innerHTML = `<div class="empty"><div class="empty-icon" style="font-size:24px">⏳</div>Загружаем расписание...</div>`;
+        counterEl.style.display = 'none';
+
+        // Сбрасываем автообновление
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+
         try {
             const r = await fetch(`/api/schedule?group_id=${encodeURIComponent(currentGroupId)}&date=${encodeURIComponent(selectedDateStr)}`);
             const data = await r.json();
-            if (data.error) { list.innerHTML = `<div class="empty">Ошибка: ${data.error}</div>`; return; }
-            if (!data.lessons || data.lessons.length === 0) {
-                list.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div>Пар нет — можно отдыхать!</div>`;
+
+            if (data.error) {
+                list.innerHTML = `<div class="empty">Ошибка: ${data.error}</div>`;
                 return;
             }
-            list.innerHTML = data.lessons.map(l => {
-                const teacherHtml = l.teacher_url
-                    ? `<a href="${l.teacher_url}" target="_blank" class="teacher-link">${l.teacher}</a>`
-                    : l.teacher;
-                const footer = [];
-                if (l.moodle_url) footer.push(`<a href="${l.moodle_url}" target="_blank" class="moodle-btn">📖 Moodle</a>`);
-                if (l.note) footer.push(`<span class="note-text">📌 ${l.note}</span>`);
-                const footerHtml = footer.length ? `<div class="lesson-footer">${footer.join('')}</div>` : '';
-                return `
-                <div class="lesson-card">
-                    <div class="lesson-time">${l.time_start} — ${l.time_end}</div>
-                    <div class="lesson-subject">${l.subject}</div>
-                    <div class="pill-row"><span class="pill ${typeClass(l.type)}">${l.type}</span></div>
-                    <div class="lesson-meta">
-                        <div class="meta-row"><span class="meta-icon">🏛️</span>${l.room}</div>
-                        <div class="meta-row"><span class="meta-icon">👤</span>${teacherHtml}</div>
-                    </div>
-                    ${footerHtml}
-                </div>`;
-            }).join('');
+
+            cachedLessons = data.lessons || [];
+            renderLessons(cachedLessons);
+
+            // Автообновление статусов каждые 30 секунд (только для сегодня)
+            if (isToday() && cachedLessons.length > 0) {
+                clockInterval = setInterval(() => {
+                    renderLessons(cachedLessons);
+                }, 30000);
+            }
+
         } catch (e) {
             list.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div>Ошибка загрузки.<br>Попробуйте позже.</div>`;
         }
@@ -589,12 +814,10 @@
             const r = await fetch(`/api/get_settings?chat_id=${chatId}`);
             const data = await r.json();
             selectedRemindMin = data.remind_min ?? 15;
-            // Подставить group_id из настроек если нет в localStorage
             if (!currentGroupId && data.group_id) {
                 currentGroupId = data.group_id;
                 localStorage.setItem('selected_group_id', currentGroupId);
             }
-            // Отметить чип
             document.querySelectorAll('.remind-chip').forEach(c => {
                 c.classList.remove('active');
                 if (parseInt(c.dataset.val) === selectedRemindMin) c.classList.add('active');

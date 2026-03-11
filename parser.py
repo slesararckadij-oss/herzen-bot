@@ -25,58 +25,56 @@ class HerzenParser:
         groups, seen = [], set()
         for a in soup.find_all("a", href=re.compile(r"id_group=(\d+)")):
             g_id = re.search(r"id_group=(\d+)", a["href"]).group(1)
-            if g_id not in seen:
+            name = a.get_text(strip=True)
+            if g_id not in seen and name:
                 seen.add(g_id)
-                groups.append({"id": g_id, "name": a.get_text(strip=True)})
+                groups.append({"id": g_id, "name": name})
         return sorted(groups, key=lambda x: x['name'])
 
     async def get_schedule_for_date(self, group_id, target_date):
-        html = await self._get(f"{BASE_URL}/schedule/{group_id}/by-dates")
-        if not html: return []
+        # target_date приходит как YYYY-MM-DD
+        y, m, d = target_date.split('-')
+        # Сайт Герцена принимает дату в формате DD.MM.YYYY через параметры
+        url = f"{BASE_URL}/schedule/{group_id}/classes?date={d}.{m}.{y}"
         
-        # Превращаем 2026-03-11 в 11.03.2026
-        d, m, y = target_date.split('-')[2], target_date.split('-')[1], target_date.split('-')[0]
-        site_date = f"{d}.{m}.{y}"
+        html = await self._get(url)
+        if not html: return []
         
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
         
-        # Находим конкретный заголовок даты
-        date_header = soup.find(string=re.compile(re.escape(site_date)))
-        if not date_header: return []
+        # Ищем все блоки с парами. На этой странице они обычно в <li> или в таблице
+        items = soup.find_all(["li", "tr"], class_=re.compile(r"level|lesson|class"))
+        if not items:
+            items = soup.find_all(["li", "tr"]) # Запасной вариант
 
-        # Берем родительский контейнер, где лежит дата, и идем по следующим элементам
-        curr = date_header.find_parent(["div", "tr", "li"])
-        if not curr: curr = date_header
-
-        # Ищем все элементы до следующей даты
-        for sibling in curr.find_all_next():
-            # Если встретили другую дату — стоп
-            if re.search(r"\d{2}\.\d{2}\.\d{4}", sibling.get_text()[:12]):
-                if site_date not in sibling.get_text(): break
-            
-            text = sibling.get_text(" ", strip=True)
+        for item in items:
+            text = item.get_text(" ", strip=True)
             time_match = re.search(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})", text)
             
-            if time_match and "ауд." in text.lower():
-                # Чтобы не дублировать один и тот же блок (так как find_all_next заходит внутрь)
+            if time_match and len(text) > 20:
+                # Проверка на дубли
                 if any(l['time_start'] == time_match.group(1) for l in lessons): continue
                 
-                teacher = sibling.find("a", href=re.compile(r"teachers"))
-                moodle = sibling.find("a", href=re.compile(r"moodle"))
+                teacher = item.find("a", href=re.compile(r"teachers|atlas"))
+                moodle = item.find("a", href=re.compile(r"moodle|clms"))
                 
-                # Чистка названия
-                subject = text.split(time_match.group(0))[-1].split("ауд.")[0].strip()
+                # Вытягиваем название предмета
+                sub_part = text.split(time_match.group(0))[-1]
+                subject = sub_part.split("ауд.")[0].split("лекц")[0].split("практ")[0].strip()
                 subject = re.sub(r"^\d+\.", "", subject).strip()
+
+                if len(subject) < 3: continue
 
                 lessons.append({
                     "time_start": time_match.group(1),
                     "time_end": time_match.group(2),
-                    "subject": subject if len(subject) > 2 else "Дисциплина",
+                    "subject": subject,
                     "type": "Лекция" if "лекц" in text.lower() else ("Практика" if "практ" in text.lower() else "Занятие"),
                     "teacher": teacher.get_text(strip=True) if teacher else "Не указан",
-                    "teacher_url": f"{BASE_URL}{teacher['href']}" if teacher else "",
-                    "room": "ауд." + text.split("ауд.")[-1].split(",")[0].strip(),
+                    "teacher_url": f"{BASE_URL}{teacher['href']}" if teacher and not teacher['href'].startswith('http') else (teacher['href'] if teacher else ""),
+                    "room": "ауд. " + text.split("ауд.")[-1].split(",")[0].strip() if "ауд." in text.lower() else "—",
                     "moodle_url": moodle["href"] if moodle else ""
                 })
-        return lessons
+        
+        return sorted(lessons, key=lambda x: x['time_start'])

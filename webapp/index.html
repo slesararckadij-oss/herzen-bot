@@ -10,35 +10,45 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
     <style>
         :root { --bg: #000000; --card: #121214; --accent: #ff9f0a; --text: #ffffff; --text-sec: #98989d; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-top: 70px; }
-        .header-fixed { position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(15px); padding: 10px 16px; z-index: 100; display: flex; gap: 10px; }
-        .search-input { width: 100%; background: #1c1c1e; border: none; border-radius: 12px; padding: 10px; color: white; outline: none; }
-        .icon-btn { background: #1c1c1e; border: none; border-radius: 12px; width: 42px; height: 42px; color: var(--accent); cursor: pointer; }
-        .nav-container { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
-        #groupSelect { width: 100%; background: #1c1c1e; color: white; border: none; border-radius: 12px; padding: 10px; outline: none; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-top: 130px; }
+        .header-fixed { position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.92); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); padding: 10px 16px 12px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+        .header-row { display: flex; gap: 8px; }
+        .search-input { flex: 1; background: #1c1c1e; border: none; border-radius: 12px; padding: 10px 12px; color: white; outline: none; font-size: 15px; }
+        .search-input::placeholder { color: var(--text-sec); }
+        .icon-btn { background: #1c1c1e; border: none; border-radius: 12px; width: 42px; height: 42px; color: var(--accent); cursor: pointer; font-size: 18px; flex-shrink: 0; }
+        #groupSelect { width: 100%; background: #1c1c1e; color: white; border: none; border-radius: 12px; padding: 10px 12px; outline: none; font-size: 15px; }
+        #groupSelect option { background: #1c1c1e; }
         .tabs { display: flex; background: #1c1c1e; padding: 3px; border-radius: 12px; }
-        .tab { flex: 1; padding: 8px; text-align: center; font-size: 13px; border-radius: 10px; color: var(--text-sec); cursor: pointer; }
+        .tab { flex: 1; padding: 8px; text-align: center; font-size: 13px; border-radius: 10px; color: var(--text-sec); cursor: pointer; user-select: none; transition: background 0.15s; }
         .tab.active { background: #323234; color: white; font-weight: 600; }
         .lesson-card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 14px; border-left: 4px solid var(--accent); }
-        .time-badge { color: var(--accent); font-weight: 700; }
-        .date-display { font-size: 22px; font-weight: 800; margin: 15px 0; }
-        .empty { text-align: center; margin-top: 50px; color: var(--text-sec); }
+        .time-badge { color: var(--accent); font-weight: 700; font-size: 15px; }
+        .subject-title { font-weight: bold; font-size: 17px; margin: 8px 0 6px; line-height: 1.3; }
+        .lesson-meta { color: var(--text-sec); font-size: 14px; line-height: 1.8; }
+        .lesson-type { display: inline-block; font-size: 12px; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 1px 6px; margin-bottom: 6px; }
+        .lesson-note { font-size: 12px; color: var(--text-sec); margin-top: 4px; }
+        .date-display { font-size: 22px; font-weight: 800; margin: 15px 0 10px; text-transform: capitalize; }
+        .empty { text-align: center; margin-top: 50px; color: var(--text-sec); font-size: 16px; }
+        .loading { text-align: center; margin-top: 40px; color: var(--text-sec); }
+        a.teacher-link { color: #4a9eff; text-decoration: none; }
+        a.teacher-link:hover { text-decoration: underline; }
+        .flatpickr-calendar { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
     </style>
 </head>
 <body>
     <div class="header-fixed">
-        <input type="text" id="groupSearch" class="search-input" placeholder="Поиск группы..." oninput="filterGroups()">
-        <button class="icon-btn" id="calendarBtn">📅</button>
-    </div>
-
-    <div class="nav-container">
+        <div class="header-row">
+            <input type="text" id="groupSearch" class="search-input" placeholder="Поиск группы..." oninput="filterGroups()">
+            <button class="icon-btn" id="calendarBtn" title="Выбрать дату">📅</button>
+        </div>
         <select id="groupSelect" onchange="onGroupChange(this.value)">
-            <option value="">Выберите группу</option>
+            <option value="">Выберите группу...</option>
         </select>
         <div class="tabs">
-            <div class="tab" id="tab-yesterday" onclick="changeDate(-1)">Вчера</div>
-            <div class="tab active" id="tab-today" onclick="changeDate(0)">Сегодня</div>
-            <div class="tab" id="tab-tomorrow" onclick="changeDate(1)">Завтра</div>
+            <div class="tab" id="tab-0" onclick="changeDate(-1)">Вчера</div>
+            <div class="tab active" id="tab-1" onclick="changeDate(0)">Сегодня</div>
+            <div class="tab" id="tab-2" onclick="changeDate(1)">Завтра</div>
         </div>
     </div>
 
@@ -48,79 +58,146 @@
 
     <script>
         let allGroups = [];
-        let currentGroupId = localStorage.getItem('selected_group_id');
-        let selectedDate = new Date();
+        let currentGroupId = localStorage.getItem('selected_group_id') || '';
+        let currentOffset = 0;
+
+        function localDateStr(offsetDays) {
+            const now = new Date();
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function localDateFromStr(str) {
+            const [y, m, d] = str.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
 
         const fp = flatpickr("#datePicker", {
-            locale: "ru", dateFormat: "Y-m-d",
-            onChange: (d) => { selectedDate = d[0]; resetTabs(); loadSchedule(); }
+            locale: "ru",
+            dateFormat: "Y-m-d",
+            onChange: (dates, str) => {
+                if (dates.length > 0) {
+                    currentOffset = null;
+                    resetTabs();
+                    loadScheduleForDate(str);
+                }
+            }
         });
         document.getElementById('calendarBtn').onclick = () => fp.open();
 
         async function init() {
+            updateDateLabel(localDateStr(0));
+            if (currentGroupId) {
+                loadScheduleForDate(localDateStr(0));
+            }
             const res = await fetch('/api/groups');
             const data = await res.json();
             allGroups = data.groups || [];
             renderGroups(allGroups);
             if (currentGroupId) {
                 document.getElementById('groupSelect').value = currentGroupId;
-                loadSchedule();
             }
         }
 
         function renderGroups(groups) {
             const select = document.getElementById('groupSelect');
-            select.innerHTML = '<option value="">Выберите группу</option>';
-            groups.forEach(g => select.add(new Option(g.name, g.id)));
+            const prevVal = select.value;
+            select.innerHTML = '<option value="">Выберите группу...</option>';
+            groups.forEach(g => {
+                const opt = new Option(g.name, g.id);
+                select.add(opt);
+            });
+            if (prevVal) select.value = prevVal;
         }
 
         function filterGroups() {
-            const val = document.getElementById('groupSearch').value.toLowerCase();
-            const select = document.getElementById('groupSelect');
-            const options = select.options;
-            for (let i = 1; i < options.length; i++) {
-                options[i].style.display = options[i].text.toLowerCase().includes(val) ? 'block' : 'none';
+            const val = document.getElementById('groupSearch').value.trim().toLowerCase();
+            if (!val) {
+                renderGroups(allGroups);
+                if (currentGroupId) document.getElementById('groupSelect').value = currentGroupId;
+                return;
             }
+            const filtered = allGroups.filter(g => g.name.toLowerCase().includes(val));
+            renderGroups(filtered);
         }
 
         function onGroupChange(id) {
             currentGroupId = id;
-            localStorage.setItem('selected_group_id', id);
-            loadSchedule();
+            if (id) {
+                localStorage.setItem('selected_group_id', id);
+                const dateStr = currentOffset !== null ? localDateStr(currentOffset) : fp.selectedDates[0]
+                    ? localDateStr(0)
+                    : localDateStr(0);
+                const actualDate = currentOffset !== null
+                    ? localDateStr(currentOffset)
+                    : (fp.selectedDates[0] ? fp.formatDate(fp.selectedDates[0], 'Y-m-d') : localDateStr(0));
+                loadScheduleForDate(actualDate);
+            }
         }
 
         function changeDate(offset) {
-            selectedDate = new Date();
-            selectedDate.setDate(selectedDate.getDate() + offset);
+            currentOffset = offset;
             document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === offset + 1));
-            loadSchedule();
+            const dateStr = localDateStr(offset);
+            updateDateLabel(dateStr);
+            if (currentGroupId) loadScheduleForDate(dateStr);
         }
 
-        function resetTabs() { document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); }
+        function resetTabs() {
+            currentOffset = null;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        }
 
-        async function loadSchedule() {
+        function updateDateLabel(dateStr) {
+            const d = localDateFromStr(dateStr);
+            const label = d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+            document.getElementById('currentDateLabel').textContent = label.charAt(0).toUpperCase() + label.slice(1);
+        }
+
+        async function loadScheduleForDate(dateStr) {
+            updateDateLabel(dateStr);
             const list = document.getElementById('scheduleList');
-            if (!currentGroupId) return;
-            document.getElementById('currentDateLabel').innerText = selectedDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
-            list.innerHTML = '<div class="empty">Загрузка...</div>';
-            
-            const dateStr = selectedDate.toISOString().split('T')[0];
-            const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${dateStr}`);
-            const data = await r.json();
-            
-            if (!data.lessons || data.lessons.length === 0) {
-                list.innerHTML = '<div class="empty">Пар нет 🥂</div>';
+            if (!currentGroupId) {
+                list.innerHTML = '<div class="empty">Выберите группу</div>';
                 return;
             }
-
-            list.innerHTML = data.lessons.map(l => `
-                <div class="lesson-card">
-                    <div><span class="time-badge">${l.time_start} — ${l.time_end}</span></div>
-                    <div style="font-weight:bold; font-size:18px; margin:8px 0;">${l.subject}</div>
-                    <div style="color:var(--text-sec)">🏛️ ${l.room} | 👤 ${l.teacher}</div>
-                </div>
-            `).join('');
+            list.innerHTML = '<div class="loading">Загрузка...</div>';
+            try {
+                const r = await fetch(`/api/schedule?group_id=${encodeURIComponent(currentGroupId)}&date=${encodeURIComponent(dateStr)}`);
+                const data = await r.json();
+                if (data.error) {
+                    list.innerHTML = `<div class="empty">Ошибка: ${data.error}</div>`;
+                    return;
+                }
+                if (!data.lessons || data.lessons.length === 0) {
+                    list.innerHTML = '<div class="empty">Пар нет 🥂</div>';
+                    return;
+                }
+                list.innerHTML = data.lessons.map(l => {
+                    const teacherHtml = l.teacher_url
+                        ? `<a href="${l.teacher_url}" target="_blank" class="teacher-link">👤 ${l.teacher}</a>`
+                        : `👤 ${l.teacher}`;
+                    const noteHtml = l.note ? `<div class="lesson-note">📌 ${l.note}</div>` : '';
+                    return `
+                        <div class="lesson-card">
+                            <div><span class="time-badge">${l.time_start} — ${l.time_end}</span></div>
+                            <div class="subject-title">${l.subject}</div>
+                            <span class="lesson-type">${l.type}</span>
+                            <div class="lesson-meta">
+                                🏛️ ${l.room}<br>
+                                ${teacherHtml}
+                            </div>
+                            ${noteHtml}
+                        </div>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = '<div class="empty">Ошибка загрузки. Попробуйте позже.</div>';
+            }
         }
+
         init();
     </script>
 </body>

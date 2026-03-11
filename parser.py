@@ -22,7 +22,11 @@ WEEKDAYS_RU = {
 class HerzenParser:
     def __init__(self):
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
         }
 
     async def _get(self, url: str) -> str:
@@ -43,8 +47,9 @@ class HerzenParser:
             return []
         soup = BeautifulSoup(html, "html.parser")
         groups, seen = [], set()
-        for a in soup.find_all("a", href=re.compile(r"/schedule/(\d+)/classes")):
-            m = re.search(r"/schedule/(\d+)/classes", a["href"])
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            m = re.search(r"/schedule/(\d+)/classes", href)
             if not m:
                 continue
             g_id = m.group(1)
@@ -56,48 +61,85 @@ class HerzenParser:
 
     def _date_in_range(self, target: date, note: str) -> bool:
         """
-        Проверяет, попадает ли target в диапазон из примечания.
+        Проверяет попадание target в диапазон из примечания.
         Форматы: "2.02—11.05" (диапазон) или "25.05" (одна дата).
         Год берём из target.
         """
         note = note.strip()
         year = target.year
 
-        range_match = re.match(r"(\d{1,2})\.(\d{1,2})\s*[—\-–]\s*(\d{1,2})\.(\d{1,2})", note)
+        range_match = re.match(
+            r"(\d{1,2})\.(\d{1,2})\s*[—\-–]\s*(\d{1,2})\.(\d{1,2})", note
+        )
         if range_match:
             d1, m1, d2, m2 = map(int, range_match.groups())
-            start = date(year, m1, d1)
-            end = date(year, m2, d2)
-            if end < start:
-                end = date(year + 1, m2, d2)
-            return start <= target <= end
+            try:
+                start = date(year, m1, d1)
+                end = date(year, m2, d2)
+                if end < start:
+                    end = date(year + 1, m2, d2)
+                return start <= target <= end
+            except ValueError:
+                return True
 
         single_match = re.match(r"(\d{1,2})\.(\d{1,2})$", note)
         if single_match:
             d1, m1 = map(int, single_match.groups())
-            return target == date(year, m1, d1)
+            try:
+                return target == date(year, m1, d1)
+            except ValueError:
+                return False
 
         return True
 
+    def _get_subject(self, item) -> str:
+        """Извлекает название предмета из блока li."""
+        subject_div = item.find("div", class_="text-base font-normal")
+        if subject_div:
+            inner = subject_div.find(["a", "span"], class_=re.compile(r"font-bold"))
+            if inner:
+                return inner.get_text(strip=True)
+            return subject_div.get_text(strip=True)
+
+        for tag in item.find_all(["a", "span"], class_=re.compile(r"font-bold")):
+            text = tag.get_text(strip=True)
+            if len(text) > 5:
+                return text
+
+        return ""
+
+    def _get_note(self, item) -> str:
+        """Извлекает текст примечания (период дат) из блока li."""
+        note_span = item.find("span", class_="italic")
+        if not note_span:
+            return ""
+        parent = note_span.parent
+        if not parent:
+            return ""
+        full_text = parent.get_text(strip=True)
+        note = re.sub(r"Примечание\s*:?\s*", "", full_text).strip()
+        note = re.sub(r"\s+", "", note)
+        return note
+
     async def get_schedule_for_date(self, group_id: str, target_date: str):
         """
-        target_date: строка в формате YYYY-MM-DD
+        target_date: строка YYYY-MM-DD
         Возвращает список занятий на эту дату.
         """
         target = datetime.strptime(target_date, "%Y-%m-%d").date()
         target_weekday = target.weekday()
 
-        url = f"{BASE_URL}/schedule/{group_id}/classes"
-        html = await self._get(url)
+        html = await self._get(f"{BASE_URL}/schedule/{group_id}/classes")
         if not html:
             return []
 
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
 
-        day_blocks = soup.find_all("div", class_=re.compile(r"p-5.*rounded-lg|rounded-lg.*p-5"))
-        if not day_blocks:
-            day_blocks = soup.find_all("div", class_=lambda c: c and "p-5" in c and "rounded-lg" in c)
+        day_blocks = soup.find_all(
+            "div",
+            class_=lambda c: c and "p-5" in c and "rounded-lg" in c
+        )
 
         for block in day_blocks:
             time_el = block.find("time")
@@ -110,50 +152,45 @@ class HerzenParser:
 
             items = block.find_all("li")
             for item in items:
-                text = item.get_text(" ", strip=True)
+                time_div = item.find("div", class_=re.compile(r"font-bold.*self-center|text-lg.*font-bold"))
+                if not time_div:
+                    time_div = item.find("div", style=re.compile(r"width.*110"))
+                if not time_div:
+                    continue
 
-                time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", text)
+                time_text = time_div.get_text(strip=True)
+                time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", time_text)
+                if not time_match:
+                    time_text_full = item.get_text(" ", strip=True)
+                    time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", time_text_full)
                 if not time_match:
                     continue
 
-                note_el = item.find("span", class_="italic")
-                note = ""
-                if note_el:
-                    note_text = note_el.parent.get_text(strip=True) if note_el.parent else ""
-                    note_clean = re.sub(r"Примечание\s*:?\s*", "", note_text).strip()
-                    note_clean = re.sub(r"[^0-9.—\-–]", "", note_clean)
-                    note = note_clean
-
+                note = self._get_note(item)
                 if note and not self._date_in_range(target, note):
                     continue
 
-                teacher_tag = item.find("a", href=re.compile(r"atlas\.herzen|teachers"))
-                moodle_tag = item.find("a", href=re.compile(r"moodle|clms"))
-
-                subject_div = item.find("div", class_=re.compile(r"font-semibold|font-bold|text-lg"))
-                if subject_div:
-                    subject = subject_div.get_text(strip=True)
-                else:
-                    sub_part = text.split(time_match.group(0))[-1]
-                    subject = sub_part.split("ауд.")[0].split("лекц")[0].split("практ")[0].strip()
-                    subject = re.sub(r"^\d+\.", "", subject).strip()
-
-                subject = re.sub(r"\s+", " ", subject).strip()
-                if len(subject) < 3:
+                subject = self._get_subject(item)
+                if not subject or len(subject) < 3:
                     continue
 
+                item_text = item.get_text(" ", strip=True)
+
                 lesson_type = "Занятие"
-                if "лекц" in text.lower():
+                if "лекц" in item_text.lower():
                     lesson_type = "Лекция"
-                elif "практ" in text.lower():
+                elif "практ" in item_text.lower():
                     lesson_type = "Практика"
-                elif "семин" in text.lower():
+                elif "семин" in item_text.lower():
                     lesson_type = "Семинар"
 
                 room = "—"
-                room_match = re.search(r"ауд\.?\s*([^\n,<]{2,40})", text, re.IGNORECASE)
+                room_match = re.search(r"ауд\.?\s*([^\n,<(]{2,50})", item_text, re.IGNORECASE)
                 if room_match:
-                    room = "ауд. " + room_match.group(1).strip().rstrip(".")
+                    room = "ауд. " + room_match.group(1).strip().rstrip(".").rstrip()
+
+                teacher_tag = item.find("a", href=re.compile(r"atlas\.herzen|/teachers/"))
+                moodle_tag = item.find("a", href=re.compile(r"moodle|clms"))
 
                 teacher_href = ""
                 if teacher_tag:

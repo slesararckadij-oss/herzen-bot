@@ -8,197 +8,26 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
-    
     <style>
-        :root {
-            --bg: #000000;
-            --card: #121214;
-            --accent: #ff9f0a;
-            --blue: #0a84ff;
-            --text: #ffffff;
-            --text-sec: #98989d;
-            --br: 16px;
-        }
-
-        body {
-            font-family: -apple-system, system-ui, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 16px;
-            padding-top: 70px;
-        }
-
-        .header-fixed {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(15px);
-            padding: 10px 16px;
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .search-wrapper { flex-grow: 1; position: relative; }
-
-        .search-input {
-            width: 100%;
-            background: #1c1c1e;
-            border: none;
-            border-radius: 12px;
-            padding: 10px 12px;
-            color: white;
-            font-size: 15px;
-            outline: none;
-            box-sizing: border-box;
-        }
-
-        .icon-btn {
-            background: #1c1c1e;
-            border: none;
-            border-radius: 12px;
-            width: 42px;
-            height: 42px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--accent);
-            font-size: 20px;
-        }
-
-        .nav-container {
-            margin-top: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .tabs {
-            display: flex;
-            background: #1c1c1e;
-            padding: 3px;
-            border-radius: 12px;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 8px;
-            text-align: center;
-            font-size: 13px;
-            border-radius: 10px;
-            color: var(--text-sec);
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .tab.active {
-            background: #323234;
-            color: white;
-            font-weight: 600;
-        }
-
-        .week-selector {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-        }
-
-        .week-btn {
-            background: #1c1c1e;
-            color: var(--text-sec);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            white-space: nowrap;
-            border: 1px solid #333;
-            cursor: pointer;
-        }
-
-        .lesson-card {
-            background: var(--card);
-            border-radius: var(--br);
-            padding: 16px;
-            margin-bottom: 14px;
-            border-left: 4px solid var(--accent);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .time-box {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .time-badge { color: var(--accent); font-weight: 700; font-size: 15px; }
-
-        .type-badge {
-            background: #2c2c2e;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            text-transform: uppercase;
-            color: var(--text-sec);
-        }
-
-        .subject-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
-
-        .info-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-sec);
-            font-size: 14px;
-            margin-top: 6px;
-        }
-
-        .teacher-link { color: var(--blue); text-decoration: none; }
-
-        .moodle-btn {
-            margin-top: 15px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--accent);
-            font-size: 13px;
-            text-decoration: none;
-            border: 1px solid var(--accent);
-            padding: 6px 12px;
-            border-radius: 8px;
-        }
-
-        #groupSelect {
-            width: 100%;
-            background: #1c1c1e;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            padding: 10px;
-            margin-top: 8px;
-            outline: none;
-        }
-
-        .date-display { font-size: 22px; font-weight: 800; margin: 15px 0 5px 0; color: white; }
-
+        :root { --bg: #000000; --card: #121214; --accent: #ff9f0a; --text: #ffffff; --text-sec: #98989d; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-top: 70px; }
+        .header-fixed { position: fixed; top: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(15px); padding: 10px 16px; z-index: 100; display: flex; gap: 10px; }
+        .search-input { width: 100%; background: #1c1c1e; border: none; border-radius: 12px; padding: 10px; color: white; outline: none; }
+        .icon-btn { background: #1c1c1e; border: none; border-radius: 12px; width: 42px; height: 42px; color: var(--accent); cursor: pointer; }
+        .nav-container { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+        #groupSelect { width: 100%; background: #1c1c1e; color: white; border: none; border-radius: 12px; padding: 10px; outline: none; }
+        .tabs { display: flex; background: #1c1c1e; padding: 3px; border-radius: 12px; }
+        .tab { flex: 1; padding: 8px; text-align: center; font-size: 13px; border-radius: 10px; color: var(--text-sec); cursor: pointer; }
+        .tab.active { background: #323234; color: white; font-weight: 600; }
+        .lesson-card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 14px; border-left: 4px solid var(--accent); }
+        .time-badge { color: var(--accent); font-weight: 700; }
+        .date-display { font-size: 22px; font-weight: 800; margin: 15px 0; }
         .empty { text-align: center; margin-top: 50px; color: var(--text-sec); }
     </style>
 </head>
 <body>
-
     <div class="header-fixed">
-        <div class="search-wrapper">
-            <input type="text" id="groupSearch" class="search-input" placeholder="Поиск группы..." oninput="filterGroups()">
-        </div>
+        <input type="text" id="groupSearch" class="search-input" placeholder="Поиск группы..." oninput="filterGroups()">
         <button class="icon-btn" id="calendarBtn">📅</button>
     </div>
 
@@ -206,23 +35,15 @@
         <select id="groupSelect" onchange="onGroupChange(this.value)">
             <option value="">Выберите группу</option>
         </select>
-
         <div class="tabs">
             <div class="tab" id="tab-yesterday" onclick="changeDate(-1)">Вчера</div>
             <div class="tab active" id="tab-today" onclick="changeDate(0)">Сегодня</div>
             <div class="tab" id="tab-tomorrow" onclick="changeDate(1)">Завтра</div>
         </div>
-
-        <div class="week-selector">
-            <div class="week-btn" onclick="loadWeek('current')">Эта неделя</div>
-            <div class="week-btn" onclick="loadWeek('next')">Следующая</div>
-            <div class="week-btn" onclick="alert('Раздел Сессия в разработке')">Сессия</div>
-        </div>
     </div>
 
     <div id="currentDateLabel" class="date-display"></div>
     <div id="scheduleList"></div>
-
     <input type="text" id="datePicker" style="display:none">
 
     <script>
@@ -231,52 +52,35 @@
         let selectedDate = new Date();
 
         const fp = flatpickr("#datePicker", {
-            locale: "ru",
-            dateFormat: "Y-m-d",
-            disableMobile: "true",
-            onChange: function(selectedDates) {
-                selectedDate = selectedDates[0];
-                resetTabs();
-                loadSchedule();
-            }
+            locale: "ru", dateFormat: "Y-m-d",
+            onChange: (d) => { selectedDate = d[0]; resetTabs(); loadSchedule(); }
         });
-
-        document.getElementById('calendarBtn').addEventListener('click', () => fp.open());
+        document.getElementById('calendarBtn').onclick = () => fp.open();
 
         async function init() {
-            try {
-                const res = await fetch('/api/groups');
-                const data = await res.json();
-                allGroups = data.groups || [];
-                renderGroups(allGroups);
-                
-                if (currentGroupId) {
-                    const select = document.getElementById('groupSelect');
-                    select.value = currentGroupId;
-                    loadSchedule();
-                }
-            } catch (e) { console.error("Init error:", e); }
+            const res = await fetch('/api/groups');
+            const data = await res.json();
+            allGroups = data.groups || [];
+            renderGroups(allGroups);
+            if (currentGroupId) {
+                document.getElementById('groupSelect').value = currentGroupId;
+                loadSchedule();
+            }
         }
 
         function renderGroups(groups) {
             const select = document.getElementById('groupSelect');
-            const savedValue = select.value || currentGroupId;
             select.innerHTML = '<option value="">Выберите группу</option>';
-            groups.forEach(g => {
-                const opt = new Option(g.name, g.id);
-                select.add(opt);
-            });
-            if (savedValue) select.value = savedValue;
+            groups.forEach(g => select.add(new Option(g.name, g.id)));
         }
 
         function filterGroups() {
             const val = document.getElementById('groupSearch').value.toLowerCase();
-            const filtered = allGroups.filter(g => g.name.toLowerCase().includes(val));
             const select = document.getElementById('groupSelect');
-            select.innerHTML = '<option value="">Выберите группу</option>';
-            filtered.slice(0, 100).forEach(g => {
-                select.add(new Option(g.name, g.id));
-            });
+            const options = select.options;
+            for (let i = 1; i < options.length; i++) {
+                options[i].style.display = options[i].text.toLowerCase().includes(val) ? 'block' : 'none';
+            }
         }
 
         function onGroupChange(id) {
@@ -288,66 +92,35 @@
         function changeDate(offset) {
             selectedDate = new Date();
             selectedDate.setDate(selectedDate.getDate() + offset);
-            
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            const tabs = ['tab-yesterday', 'tab-today', 'tab-tomorrow'];
-            document.getElementById(tabs[offset + 1]).classList.add('active');
-            
+            document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === offset + 1));
             loadSchedule();
         }
 
-        function resetTabs() {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        }
+        function resetTabs() { document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); }
 
         async function loadSchedule() {
             const list = document.getElementById('scheduleList');
-            const label = document.getElementById('currentDateLabel');
+            if (!currentGroupId) return;
+            document.getElementById('currentDateLabel').innerText = selectedDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
+            list.innerHTML = '<div class="empty">Загрузка...</div>';
             
-            if (!currentGroupId) {
-                list.innerHTML = '<div class="empty">Выберите группу 👆</div>';
+            const dateStr = selectedDate.toISOString().split('T')[0];
+            const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${dateStr}`);
+            const data = await r.json();
+            
+            if (!data.lessons || data.lessons.length === 0) {
+                list.innerHTML = '<div class="empty">Пар нет 🥂</div>';
                 return;
             }
 
-            label.innerText = selectedDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
-            list.innerHTML = '<div class="empty">Загрузка расписания... ⏳</div>';
-            
-            const dateStr = selectedDate.toISOString().split('T')[0];
-            try {
-                const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${dateStr}`);
-                const data = await r.json();
-                
-                if (!data.lessons || data.lessons.length === 0) {
-                    list.innerHTML = '<div class="empty">На этот день пар нет 🥂</div>';
-                    return;
-                }
-
-                list.innerHTML = data.lessons.map(l => `
-                    <div class="lesson-card">
-                        <div class="time-box">
-                            <span class="time-badge">🕒 ${l.time_start} — ${l.time_end}</span>
-                            <span class="type-badge">${l.type}</span>
-                        </div>
-                        <div class="subject-title">${l.subject}</div>
-                        <div class="info-row">🏛️ ${l.room}</div>
-                        <div class="info-row">👤 
-                            ${l.teacher_url ? `<a href="${l.teacher_url}" target="_blank" class="teacher-link">${l.teacher}</a>` : l.teacher}
-                        </div>
-                        ${l.moodle_url ? `<a href="${l.moodle_url}" target="_blank" class="moodle-btn">📚 Moodle</a>` : ''}
-                    </div>
-                `).join('');
-            } catch (e) {
-                list.innerHTML = '<div class="empty">Ошибка сети ❌</div>';
-            }
+            list.innerHTML = data.lessons.map(l => `
+                <div class="lesson-card">
+                    <div><span class="time-badge">${l.time_start} — ${l.time_end}</span></div>
+                    <div style="font-weight:bold; font-size:18px; margin:8px 0;">${l.subject}</div>
+                    <div style="color:var(--text-sec)">🏛️ ${l.room} | 👤 ${l.teacher}</div>
+                </div>
+            `).join('');
         }
-
-        function loadWeek(mode) {
-            // Реализация переключения на неделю (логика на фронте)
-            if (mode === 'current') {
-                alert("Функция показа всей недели настраивается. Пока используйте календарь.");
-            }
-        }
-
         init();
     </script>
 </body>

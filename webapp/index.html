@@ -371,7 +371,12 @@
         }
 
         /* Flatpickr */
-        #datePicker { position: fixed; left: -9999px; top: -9999px; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+        .cal-wrap { position: relative; }
+        #datePicker {
+            position: absolute; bottom: 0; right: 0;
+            width: 0; height: 0; opacity: 0;
+            pointer-events: none; border: none; padding: 0;
+        }
         .flatpickr-calendar { background: #18181b !important; border: 1px solid #27272a !important; border-radius: 16px !important; box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important; font-family: -apple-system, sans-serif !important; }
         .flatpickr-day.selected { background: var(--accent) !important; border-color: var(--accent) !important; color: #000 !important; font-weight: 700; }
         .flatpickr-day.today { border-color: var(--accent) !important; color: var(--accent) !important; }
@@ -392,7 +397,10 @@
             <span class="search-icon">🔍</span>
             <input type="text" id="groupSearch" class="search-input" placeholder="Поиск группы..." oninput="filterGroups()">
         </div>
-        <button class="icon-btn" id="calendarBtn" title="Выбрать дату">📅</button>
+        <div class="cal-wrap">
+            <button class="icon-btn" id="calendarBtn" title="Выбрать дату">📅</button>
+            <input type="text" id="datePicker">
+        </div>
     </div>
     <select id="groupSelect" class="group-select" onchange="onGroupChange(this.value)">
         <option value="">Выберите группу...</option>
@@ -405,8 +413,6 @@
     </div>
     <div class="day-strip" id="dayStrip"></div>
 </div>
-
-<input type="text" id="datePicker">
 
 <!-- ─── SCHEDULE TAB ─── -->
 <div id="tab-schedule" class="tab-content active">
@@ -527,33 +533,29 @@
     }
 
     // ─── FLATPICKR ───────────────────────────────────
-    let fp = null;
-
-    function initFlatpickr() {
-        fp = flatpickr("#datePicker", {
-            locale: "ru",
-            dateFormat: "Y-m-d",
-            disableMobile: true,
-            appendTo: document.body,
-            onChange: function(dates, str) {
-                if (dates.length > 0) {
-                    selectedDateStr = str;
-                    const d = dates[0];
-                    const dow = d.getDay();
-                    const diffToMon = (dow === 0) ? -6 : 1 - dow;
-                    const today = new Date();
-                    const todayMon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((today.getDay()===0)?-6:1-today.getDay()));
-                    const selMon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon);
-                    weekOffset = Math.round((selMon - todayMon) / (7*86400000));
-                    renderWeek();
-                    loadSchedule();
-                }
+    // Инициализируем сразу при загрузке страницы
+    const fp = flatpickr("#datePicker", {
+        locale: "ru",
+        dateFormat: "Y-m-d",
+        disableMobile: true,
+        onChange: function(dates, str) {
+            if (dates.length > 0) {
+                selectedDateStr = str;
+                const d = dates[0];
+                const dow = d.getDay();
+                const diffToMon = (dow === 0) ? -6 : 1 - dow;
+                const today = new Date();
+                const todayMon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + ((today.getDay()===0)?-6:1-today.getDay()));
+                const selMon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon);
+                weekOffset = Math.round((selMon - todayMon) / (7*86400000));
+                renderWeek();
+                loadSchedule();
             }
-        });
-    }
+        }
+    });
 
-    document.getElementById('calendarBtn').addEventListener('click', function() {
-        if (!fp) initFlatpickr();
+    document.getElementById('calendarBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
         fp.open();
     });
 

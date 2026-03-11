@@ -1,270 +1,272 @@
 # -*- coding: utf-8 -*-
-import os
-import json
+import aiohttp
+import re
 import logging
-import asyncio
-import sqlite3
-import threading
-import requests
-from datetime import datetime, date, timedelta
-from flask import Flask, send_from_directory, request, jsonify
-from apscheduler.schedulers.background import BackgroundScheduler
-from parser import HerzenParser
+from datetime import datetime, date
+from bs4 import BeautifulSoup
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+BASE_URL = "https://guide.herzen.spb.ru"
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-WEBAPP_URL = os.environ.get("WEBAPP_URL")
-RENDER_URL = os.environ.get("RENDER_URL", "")  # URL вашего сервиса на Render (например: https://my-bot.onrender.com)
-API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+WEEKDAYS_RU = {
+    "понедельник": 0,
+    "вторник": 1,
+    "среда": 2,
+    "четверг": 3,
+    "пятница": 4,
+    "суббота": 5,
+    "воскресенье": 6,
+}
 
-app = Flask(__name__, static_folder="webapp")
-parser = HerzenParser()
-db_lock = threading.Lock()
 
-# ─── DB ──────────────────────────────────────────────────
-def get_db():
-    conn = sqlite3.connect("reminders.db", check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _time_to_minutes(t: str) -> int:
+    try:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+    except Exception:
+        return 0
 
-def init_db():
-    with get_db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                chat_id     INTEGER PRIMARY KEY,
-                group_id    TEXT,
-                remind_min  INTEGER DEFAULT 15
+
+class HerzenParser:
+    def __init__(self):
+        self.headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
             )
-        """)
-        conn.commit()
+        }
 
-init_db()
-
-def get_user(chat_id):
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE chat_id=?", (chat_id,)).fetchone()
-        return dict(row) if row else None
-
-def upsert_user(chat_id, group_id=None, remind_min=None):
-    with db_lock:
-        with get_db() as conn:
-            existing = conn.execute("SELECT * FROM users WHERE chat_id=?", (chat_id,)).fetchone()
-            if existing:
-                if group_id is not None:
-                    conn.execute("UPDATE users SET group_id=? WHERE chat_id=?", (group_id, chat_id))
-                if remind_min is not None:
-                    conn.execute("UPDATE users SET remind_min=? WHERE chat_id=?", (remind_min, chat_id))
-            else:
-                conn.execute(
-                    "INSERT INTO users (chat_id, group_id, remind_min) VALUES (?,?,?)",
-                    (chat_id, group_id, remind_min or 15)
-                )
-            conn.commit()
-
-def get_all_users():
-    with get_db() as conn:
-        return [dict(r) for r in conn.execute("SELECT * FROM users WHERE group_id IS NOT NULL").fetchall()]
-
-# ─── HELPERS ─────────────────────────────────────────────
-def run_async(coro):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-def send_message(chat_id, text, reply_markup=None):
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    try:
-        requests.post(f"{API}/sendMessage", json=payload, timeout=10)
-    except Exception as e:
-        logger.error(f"sendMessage error: {e}")
-
-def set_menu_button(chat_id):
-    try:
-        requests.post(f"{API}/setChatMenuButton", json={
-            "chat_id": chat_id,
-            "menu_button": {
-                "type": "web_app",
-                "text": "📅 Расписание",
-                "web_app": {"url": WEBAPP_URL}
-            }
-        }, timeout=10)
-    except Exception as e:
-        logger.error(f"setChatMenuButton error: {e}")
-
-# ─── KEEP-ALIVE (для бесплатного Render) ─────────────────
-def keep_alive_ping():
-    """
-    Пингует собственный сервис, чтобы он не засыпал на бесплатном плане Render.
-    Render бесплатно засыпает после 15 минут неактивности.
-    """
-    if not RENDER_URL:
-        return
-    try:
-        r = requests.get(f"{RENDER_URL}/ping", timeout=10)
-        logger.info(f"Keep-alive ping: {r.status_code}")
-    except Exception as e:
-        logger.error(f"Keep-alive ping error: {e}")
-
-# ─── REMINDERS ───────────────────────────────────────────
-def check_and_send_reminders():
-    """
-    Проверяет расписание и отправляет напоминания за remind_min минут до пары.
-    Использует московское время (UTC+3).
-    """
-    import pytz
-    moscow_tz = pytz.timezone("Europe/Moscow")
-    now = datetime.now(moscow_tz).replace(tzinfo=None)
-    today_str = now.strftime("%Y-%m-%d")
-    users = get_all_users()
-
-    for user in users:
-        chat_id = user["chat_id"]
-        group_id = user["group_id"]
-        remind_min = user.get("remind_min", 15)
-
-        if remind_min == 0:
-            continue
-
-        try:
-            lessons = run_async(parser.get_schedule_for_date(group_id, today_str))
-        except Exception as e:
-            logger.error(f"Reminder parse error for {chat_id}: {e}")
-            continue
-
-        for lesson in lessons:
+    async def _get(self, url: str) -> str:
+        async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
-                lesson_time = datetime.strptime(f"{today_str} {lesson['time_start']}", "%Y-%m-%d %H:%M")
-                diff_minutes = (lesson_time - now).total_seconds() / 60
-                if remind_min - 1 <= diff_minutes <= remind_min + 1:
-                    text = (
-                        f"🔔 <b>Напоминание о паре!</b>\n\n"
-                        f"⏰ <b>{lesson['time_start']} — {lesson['time_end']}</b>\n"
-                        f"📚 {lesson['subject']}\n"
-                        f"🏛️ {lesson['room']}\n"
-                        f"👤 {lesson['teacher']}"
-                    )
-                    send_message(chat_id, text, reply_markup={
-                        "inline_keyboard": [[
-                            {"text": "📅 Открыть расписание", "web_app": {"url": WEBAPP_URL}}
-                        ]]
-                    })
-                    logger.info(f"Reminder sent to {chat_id} for {lesson['subject']}")
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as r:
+                    if r.status == 200:
+                        return await r.text(encoding="utf-8", errors="replace")
+                    logger.warning(f"HTTP {r.status} for {url}")
+                    return ""
             except Exception as e:
-                logger.error(f"Reminder send error: {e}")
+                logger.error(f"Request error for {url}: {e}")
+                return ""
 
-# ─── SCHEDULER ───────────────────────────────────────────
-scheduler = BackgroundScheduler(timezone="Europe/Moscow")
-scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders")
-# Keep-alive каждые 13 минут (Render засыпает через 15)
-scheduler.add_job(keep_alive_ping, "interval", minutes=13, id="keepalive")
-scheduler.start()
+    async def get_all_groups(self):
+        html = await self._get(f"{BASE_URL}/schedule")
+        if not html:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        groups, seen = [], set()
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            m = re.search(r"/schedule/(\d+)/classes", href)
+            if not m:
+                continue
+            g_id = m.group(1)
+            name = a.get_text(strip=True)
+            if g_id not in seen and name:
+                seen.add(g_id)
+                groups.append({"id": g_id, "name": name})
+        return sorted(groups, key=lambda x: x["name"])
 
-# ─── FLASK ROUTES ────────────────────────────────────────
-@app.route("/")
-def index():
-    return send_from_directory("webapp", "index.html")
+    def _date_in_range(self, target: date, note: str) -> bool:
+        """
+        Проверяет, попадает ли target в диапазон дат из примечания.
+        Поддерживает форматы: "01.09 — 31.12", "01.09", "по чётным", и т.д.
+        Если дата не указана в примечании — занятие считается актуальным.
+        """
+        note = note.strip()
+        year = target.year
 
-@app.route("/ping")
-def ping():
-    """Endpoint для keep-alive пинга."""
-    return "pong", 200
+        # Диапазон дат: "01.09 — 31.12" или "01.09-31.12"
+        range_match = re.search(
+            r"(\d{1,2})\.(\d{1,2})\s*[—\-–]\s*(\d{1,2})\.(\d{1,2})", note
+        )
+        if range_match:
+            d1, m1, d2, m2 = map(int, range_match.groups())
+            try:
+                start = date(year, m1, d1)
+                end = date(year, m2, d2)
+                if end < start:
+                    end = date(year + 1, m2, d2)
+                return start <= target <= end
+            except ValueError:
+                return True
 
-@app.route("/api/groups")
-def api_groups():
-    return jsonify({"groups": run_async(parser.get_all_groups())})
+        # Одиночная дата: "01.09"
+        single_match = re.search(r"\b(\d{1,2})\.(\d{1,2})\b", note)
+        if single_match:
+            d1, m1 = map(int, single_match.groups())
+            try:
+                return target == date(year, m1, d1)
+            except ValueError:
+                return False
 
-@app.route("/api/schedule")
-def api_schedule():
-    g_id = request.args.get("group_id")
-    date_str = request.args.get("date")
-    if not g_id or not date_str:
-        return jsonify({"error": "No params"}), 400
-    lessons = run_async(parser.get_schedule_for_date(str(g_id), date_str))
-    return jsonify({"lessons": lessons})
+        return True
 
-@app.route("/api/set_reminder", methods=["POST"])
-def api_set_reminder():
-    data = request.json
-    chat_id = data.get("chat_id")
-    group_id = data.get("group_id")
-    remind_min = data.get("remind_min")
-    if not chat_id:
-        return jsonify({"error": "No chat_id"}), 400
-    upsert_user(int(chat_id), group_id=group_id, remind_min=remind_min)
-    return jsonify({"ok": True})
+    def _get_subject(self, item) -> str:
+        subject_div = item.find("div", class_="text-base font-normal")
+        if subject_div:
+            inner = subject_div.find(["a", "span"], class_=re.compile(r"font-bold"))
+            if inner:
+                return inner.get_text(strip=True)
+            return subject_div.get_text(strip=True)
 
-@app.route("/api/get_settings")
-def api_get_settings():
-    chat_id = request.args.get("chat_id")
-    if not chat_id:
-        return jsonify({"error": "No chat_id"}), 400
-    user = get_user(int(chat_id))
-    return jsonify(user or {"chat_id": int(chat_id), "group_id": None, "remind_min": 15})
+        for tag in item.find_all(["a", "span"], class_=re.compile(r"font-bold")):
+            text = tag.get_text(strip=True)
+            if len(text) > 5:
+                return text
 
-# ─── WEBHOOK ─────────────────────────────────────────────
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-    if not data:
-        return "ok"
+        return ""
 
-    if "message" in data:
-        msg = data["message"]
-        chat_id = msg["chat"]["id"]
-        text = msg.get("text", "")
+    def _get_note(self, item) -> str:
+        for span in item.find_all("span"):
+            text = span.get_text(strip=True)
+            if "Примечание" in text:
+                parent = span.parent
+                if not parent:
+                    continue
+                full_text = parent.get_text(strip=True)
+                note = re.sub(r"Примечание\s*:?\s*", "", full_text).strip()
+                note = re.sub(r"\s+", " ", note)
+                return note
+        return ""
 
-        if text == "/start":
-            upsert_user(chat_id)
-            set_menu_button(chat_id)
-            send_message(chat_id,
-                "👋 Привет! Я бот расписания РГПУ.\n\n"
-                "📅 Нажми кнопку <b>«Расписание»</b> внизу чтобы открыть расписание.\n"
-                "🔔 Там же можно настроить напоминания о парах.",
-                reply_markup={
-                    "inline_keyboard": [[
-                        {"text": "📅 Открыть расписание", "web_app": {"url": WEBAPP_URL}}
-                    ]]
-                }
-            )
+    def _get_week_type(self, target: date) -> str:
+        """Возвращает тип недели: 'even' (чётная) или 'odd' (нечётная)."""
+        week_number = target.isocalendar()[1]
+        return "even" if week_number % 2 == 0 else "odd"
 
-        elif text.startswith("/remind"):
-            parts = text.split()
-            if len(parts) == 2 and parts[1].isdigit():
-                minutes = int(parts[1])
-                if 1 <= minutes <= 120:
-                    upsert_user(chat_id, remind_min=minutes)
-                    send_message(chat_id, f"✅ Буду напоминать за <b>{minutes} мин</b> до пары!")
-                else:
-                    send_message(chat_id, "⚠️ Укажи от 1 до 120 минут.")
+    def _check_week_parity(self, note: str, target: date) -> bool:
+        """
+        Проверяет чётность/нечётность недели если указано в примечании.
+        Если в примечании нет указания на чётность — возвращает True.
+        """
+        note_lower = note.lower()
+        week_type = self._get_week_type(target)
+
+        has_even = any(w in note_lower for w in ["чётн", "четн", "чет."])
+        has_odd = any(w in note_lower for w in ["нечётн", "нечетн", "нечет."])
+
+        if has_even and not has_odd:
+            return week_type == "even"
+        if has_odd and not has_even:
+            return week_type == "odd"
+
+        return True
+
+    async def get_schedule_for_date(self, group_id: str, target_date: str):
+        target = datetime.strptime(target_date, "%Y-%m-%d").date()
+        target_weekday = target.weekday()
+
+        html = await self._get(f"{BASE_URL}/schedule/{group_id}/classes")
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, "html.parser")
+        lessons = []
+        seen_keys = set()
+
+        day_blocks = soup.find_all(
+            "div",
+            class_=lambda c: c and "p-5" in c and "rounded-lg" in c
+        )
+
+        for block in day_blocks:
+            time_el = block.find("time")
+            if not time_el:
+                continue
+
+            time_text = time_el.get_text(strip=True)
+
+            # Сайт Герцена показывает дату + день: "16.03.2026, понедельник"
+            # Парсим дату напрямую и сравниваем с нужной датой
+            date_match = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", time_text)
+            if date_match:
+                day_n, month_n, year_n = map(int, date_match.groups())
+                try:
+                    block_date = date(year_n, month_n, day_n)
+                except ValueError:
+                    continue
+                if block_date != target:
+                    continue
             else:
-                send_message(chat_id, "Использование: /remind 15\nНапоминание придёт за указанное кол-во минут до пары.")
+                # Запасной вариант: только по названию дня недели
+                time_lower = time_text.lower()
+                block_weekday = None
+                for wd_name, wd_num in WEEKDAYS_RU.items():
+                    if wd_name in time_lower:
+                        block_weekday = wd_num
+                        break
+                if block_weekday is None or block_weekday != target_weekday:
+                    continue
 
-        elif text == "/stop":
-            upsert_user(chat_id, remind_min=0)
-            send_message(chat_id, "🔕 Напоминания отключены.")
+            items = block.find_all("li")
+            for item in items:
+                time_div = item.find("div", style=re.compile(r"width.*110"))
+                if not time_div:
+                    time_div = item.find("div", class_=re.compile(r"font-bold.*self-center|text-lg.*font-bold"))
+                if not time_div:
+                    continue
 
-    if "message" in data and data["message"].get("web_app_data"):
-        chat_id = data["message"]["chat"]["id"]
-        try:
-            wa_data = json.loads(data["message"]["web_app_data"]["data"])
-            group_id = wa_data.get("group_id")
-            remind_min = wa_data.get("remind_min")
-            if group_id:
-                upsert_user(chat_id, group_id=group_id, remind_min=remind_min)
-                logger.info(f"WebApp data saved for {chat_id}: group={group_id}, remind={remind_min}")
-        except Exception as e:
-            logger.error(f"WebApp data parse error: {e}")
+                time_text = time_div.get_text(strip=True)
+                time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", time_text)
+                if not time_match:
+                    time_text_full = item.get_text(" ", strip=True)
+                    time_match = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", time_text_full)
+                if not time_match:
+                    continue
 
-    return "ok"
+                note = self._get_note(item)
 
-# ─── MAIN ────────────────────────────────────────────────
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+                # Проверяем диапазон дат
+                if note and not self._date_in_range(target, note):
+                    continue
+
+                # Проверяем чётность недели
+                if note and not self._check_week_parity(note, target):
+                    continue
+
+                subject = self._get_subject(item)
+                if not subject or len(subject) < 3:
+                    continue
+
+                dedup_key = (time_match.group(1), subject)
+                if dedup_key in seen_keys:
+                    continue
+                seen_keys.add(dedup_key)
+
+                item_text = item.get_text(" ", strip=True)
+
+                lesson_type = "Занятие"
+                if "лекц" in item_text.lower():
+                    lesson_type = "Лекция"
+                elif "практ" in item_text.lower():
+                    lesson_type = "Практика"
+                elif "семин" in item_text.lower():
+                    lesson_type = "Семинар"
+
+                room = "—"
+                room_match = re.search(r"ауд\.?\s*([^\n,<(]{2,50})", item_text, re.IGNORECASE)
+                if room_match:
+                    room = "ауд. " + room_match.group(1).strip().rstrip(".").rstrip()
+
+                teacher_tag = item.find("a", href=re.compile(r"atlas\.herzen|/teachers/"))
+                moodle_tag = item.find("a", href=re.compile(r"moodle|clms"))
+
+                teacher_href = ""
+                if teacher_tag:
+                    href = teacher_tag.get("href", "")
+                    teacher_href = href if href.startswith("http") else f"{BASE_URL}{href}"
+
+                lessons.append({
+                    "time_start": time_match.group(1),
+                    "time_end": time_match.group(2),
+                    "subject": subject,
+                    "type": lesson_type,
+                    "teacher": teacher_tag.get_text(strip=True) if teacher_tag else "Не указан",
+                    "teacher_url": teacher_href,
+                    "room": room,
+                    "moodle_url": moodle_tag["href"] if moodle_tag else "",
+                    "note": note,
+                })
+
+        return sorted(lessons, key=lambda x: _time_to_minutes(x["time_start"]))

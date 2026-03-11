@@ -18,12 +18,12 @@ class HerzenParser:
         }
 
     async def _get(self, url: str) -> str:
+        """Безопасный запрос с автоматическим закрытием сессии"""
         async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
-                # Предварительный заход для получения кук
-                await session.get(f"{BASE_URL}/schedule", timeout=10)
                 async with session.get(url, timeout=20) as r:
-                    if r.status != 200: return ""
+                    if r.status != 200:
+                        return ""
                     return await r.text(encoding="utf-8", errors="replace")
             except Exception as e:
                 logger.error(f"Request error: {e}")
@@ -44,7 +44,7 @@ class HerzenParser:
         return groups
 
     async def get_schedule_for_date(self, group_id, target_date) -> list:
-        # Универсальная обработка даты (строка или объект)
+        """Исправлена ошибка strftime: принимает и строку, и объект date"""
         if isinstance(target_date, str):
             date_str = target_date
         else:
@@ -53,12 +53,12 @@ class HerzenParser:
         html = await self._get(f"{BASE_URL}/schedule/{group_id}/classes")
         if not html: return []
 
-        # 1. Пробуем быстрый JSON-снапшот
+        # 1. Пробуем вытащить данные из JSON (Livewire)
         all_lessons = self._extract_from_snapshot(html)
         
-        # 2. Если пусто, включаем "умный" парсинг HTML
+        # 2. Если JSON пуст, парсим сам HTML (Fallback)
         if not all_lessons:
-            logger.info("Snapshot empty, using fallback HTML parser")
+            logger.info(f"Snapshot not found for group {group_id}, using HTML fallback")
             all_lessons = self._fallback_parse_html(html, date_str)
 
         filtered = []
@@ -68,12 +68,14 @@ class HerzenParser:
                 res.pop("_date", None)
                 filtered.append(res)
         
+        logger.info(f"Final: found {len(filtered)} lessons for {date_str}")
         return filtered
 
     def _extract_from_snapshot(self, html: str) -> list:
         soup = BeautifulSoup(html, "html.parser")
         tag = soup.find(attrs={"wire:snapshot": True})
         js_raw = tag["wire:snapshot"] if tag else None
+        
         if not js_raw:
             m = re.search(r'wire:snapshot="([^"]+)"', html)
             if m: js_raw = m.group(1).replace("&quot;", '"')
@@ -90,7 +92,7 @@ class HerzenParser:
                         parsed = self._parse_json_item(item)
                         if parsed: lessons.append(parsed)
             return lessons
-        except Exception: return []
+        except: return []
 
     def _parse_json_item(self, item: dict) -> dict | None:
         subject = item.get("PNAME") or item.get("NAME_DISC") or ""
@@ -106,7 +108,6 @@ class HerzenParser:
 
         rows = item.get("ROWS", [])
         teacher = rows[0].get("TEACHER_NAME", "") if rows and isinstance(rows[0], dict) else ""
-        t_id = item.get("ID_TEACHER")
         
         return {
             "time_start": time_s,
@@ -114,15 +115,15 @@ class HerzenParser:
             "subject": subject.strip(),
             "type": self._map_type(item.get("LECTYPE", "") or str(item.get("ID_LECTYPE", ""))),
             "teacher": teacher.strip(),
-            "teacher_url": f"{BASE_URL}/teachers/{t_id}" if t_id else "",
+            "teacher_url": f"{BASE_URL}/teachers/{item.get('ID_TEACHER')}" if item.get('ID_TEACHER') else "",
             "moodle_url": (item.get("E_COURSE_URL") or "").replace("\\/", "/"),
             "room": (item.get("ROOM_NAME") or "").strip(),
             "is_remote": any(x in subject.lower() for x in ["дистанц", "видео", "online"]),
-            "note": (item.get("NOTE") or "").strip(),
             "_date": date_norm
         }
 
     def _fallback_parse_html(self, html: str, target_date_str: str) -> list:
+        """Запасной парсер: ищет дату в тексте и собирает блоки li"""
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
         try:
@@ -130,38 +131,35 @@ class HerzenParser:
             site_date = d_obj.strftime("%d.%m.%Y")
         except: site_date = target_date_str
 
-        # Поиск блока дня
-        day_block = None
-        for tag in soup.find_all(['div', 'li', 'span']):
-            if site_date in tag.get_text():
-                day_block = tag.find_parent(['div', 'ol']) or tag.parent
+        # Ищем контейнер с нужной датой
+        target_day = None
+        for block in soup.find_all(['div', 'li', 'span']):
+            if site_date in block.get_text():
+                target_day = block.find_parent(['div', 'ol']) or block.parent
                 break
         
-        if not day_block: return []
+        if not target_day: return []
 
-        # Поиск строк расписания (li)
-        for li in day_block.find_all('li', recursive=True):
+        for li in target_day.find_all('li'):
             text = li.get_text(separator=" ", strip=True)
             times = re.findall(r'\d{1,2}:\d{2}', text)
             if not times: continue
 
-            # Ссылки
+            # Ссылки и метаданные
             moodle = li.find('a', href=re.compile(r'moodle'))
-            teacher_link = li.find('a', href=re.compile(r'teachers|atlas'))
+            t_link = li.find('a', href=re.compile(r'teachers|atlas'))
             
-            # Извлечение чистого названия
             sub = text
             for t in times: sub = sub.replace(t, "")
-            # Убираем лишние слова из названия для красоты
-            sub = re.sub(r'(лекц|практ|семин|Занятие|ауд\.|корпус)', '', sub, flags=re.I).strip()
+            sub = re.sub(r'(лекц|практ|сем|Занятие|ауд\.|корп\.)', '', sub, flags=re.I).strip()
 
             lessons.append({
                 "time_start": times[0],
                 "time_end": times[1] if len(times) > 1 else "",
                 "subject": sub.split("Примечание")[0].strip(),
                 "type": "Занятие",
-                "teacher": teacher_link.get_text(strip=True) if teacher_link else "",
-                "teacher_url": teacher_link['href'] if teacher_link else "",
+                "teacher": t_link.get_text(strip=True) if t_link else "",
+                "teacher_url": t_link['href'] if t_link else "",
                 "moodle_url": moodle['href'] if moodle else "",
                 "room": re.search(r'ауд\.\s*[\w\d, ]+', text, re.I).group(0) if "ауд." in text else "",
                 "is_remote": any(x in text.lower() for x in ["дистанц", "видео", "online"]),

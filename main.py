@@ -25,22 +25,27 @@ def index():
 
 @app.route("/api/groups")
 def api_groups():
-    loop = asyncio.new_event_loop()
-    groups = loop.run_until_complete(parser.get_all_groups())
+    # Используем asyncio.run для чистоты, если Flask не в асинхронном режиме
+    groups = asyncio.run(parser.get_all_groups())
     return jsonify({"groups": groups})
 
 @app.route("/api/schedule")
 def api_schedule():
     g_id = request.args.get("group_id")
-    date_str = request.args.get("date")
-    target = datetime.strptime(date_str, "%Y-%m-%d").date()
-    loop = asyncio.new_event_loop()
-    lessons = loop.run_until_complete(parser.get_schedule_for_date(int(g_id), target))
+    date_str = request.args.get("date") # Формат YYYY-MM-DD
+    
+    if not g_id or not date_str:
+        return jsonify({"error": "Missing params"}), 400
+
+    logger.info(f"Запрос расписания для группы {g_id} на {date_str}")
+    
+    # Передаем date_str как строку, парсер сам её обработает
+    lessons = asyncio.run(parser.get_schedule_for_date(str(g_id), date_str))
+    
     return jsonify({"lessons": lessons})
 
 @app.route("/api/user_group")
 def api_user_group():
-    """Вернуть сохранённую группу пользователя по chat_id"""
     chat_id = request.args.get("chat_id")
     if chat_id and chat_id in user_groups:
         return jsonify(user_groups[chat_id])
@@ -49,28 +54,33 @@ def api_user_group():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
+    if not data: return "ok"
+    
     if "message" in data:
         msg = data["message"]
         chat_id = str(msg["chat"]["id"])
 
         if "web_app_data" in msg:
-            wa_data = json.loads(msg["web_app_data"]["data"])
-            if wa_data["action"] == "set_group":
-                user_groups[chat_id] = {
-                    "group_id": wa_data["group_id"],
-                    "group_name": wa_data["group_name"]
-                }
-                send_tg("sendMessage", {
-                    "chat_id": chat_id,
-                    "text": f"✅ Группа <b>{wa_data['group_name']}</b> сохранена!",
-                    "parse_mode": "HTML"
-                })
+            try:
+                wa_data = json.loads(msg["web_app_data"]["data"])
+                if wa_data.get("action") == "set_group":
+                    user_groups[chat_id] = {
+                        "group_id": wa_data["group_id"],
+                        "group_name": wa_data["group_name"]
+                    }
+                    send_tg("sendMessage", {
+                        "chat_id": chat_id,
+                        "text": f"✅ Группа <b>{wa_data['group_name']}</b> сохранена!",
+                        "parse_mode": "HTML"
+                    })
+            except Exception as e:
+                logger.error(f"WA Data error: {e}")
             return "ok"
 
         if msg.get("text") == "/start":
             send_tg("sendMessage", {
                 "chat_id": chat_id,
-                "text": "📅 Нажми кнопку ниже, чтобы открыть расписание:",
+                "text": "📅 Привет! Нажми кнопку ниже, чтобы открыть расписание РГПУ:",
                 "reply_markup": {
                     "inline_keyboard": [[{
                         "text": "📅 Открыть расписание",
@@ -81,6 +91,10 @@ def webhook():
     return "ok"
 
 if __name__ == "__main__":
-    if WEBAPP_URL:
-        requests.post(f"{API}/setWebhook", json={"url": f"{WEBAPP_URL}/webhook"})
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    if WEBAPP_URL and BOT_TOKEN:
+        # Устанавливаем вебхук при запуске
+        res = requests.post(f"{API}/setWebhook", json={"url": f"{WEBAPP_URL}/webhook"})
+        logger.info(f"Webhook set: {res.json()}")
+    
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

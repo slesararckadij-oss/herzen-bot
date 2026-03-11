@@ -19,6 +19,14 @@ WEEKDAYS_RU = {
 }
 
 
+def _time_to_minutes(t: str) -> int:
+    try:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+    except Exception:
+        return 0
+
+
 class HerzenParser:
     def __init__(self):
         self.headers = {
@@ -60,11 +68,6 @@ class HerzenParser:
         return sorted(groups, key=lambda x: x["name"])
 
     def _date_in_range(self, target: date, note: str) -> bool:
-        """
-        Проверяет попадание target в диапазон из примечания.
-        Форматы: "2.02—11.05" (диапазон) или "25.05" (одна дата).
-        Год берём из target.
-        """
         note = note.strip()
         year = target.year
 
@@ -93,7 +96,6 @@ class HerzenParser:
         return True
 
     def _get_subject(self, item) -> str:
-        """Извлекает название предмета из блока li."""
         subject_div = item.find("div", class_="text-base font-normal")
         if subject_div:
             inner = subject_div.find(["a", "span"], class_=re.compile(r"font-bold"))
@@ -109,23 +111,23 @@ class HerzenParser:
         return ""
 
     def _get_note(self, item) -> str:
-        """Извлекает текст примечания (период дат) из блока li."""
-        note_span = item.find("span", class_="italic")
-        if not note_span:
-            return ""
-        parent = note_span.parent
-        if not parent:
-            return ""
-        full_text = parent.get_text(strip=True)
-        note = re.sub(r"Примечание\s*:?\s*", "", full_text).strip()
-        note = re.sub(r"\s+", "", note)
-        return note
+        """
+        Ищет только тег <span>, текст которого содержит 'Примечание'.
+        Это исключает теги с классом italic у названия предмета.
+        """
+        for span in item.find_all("span"):
+            text = span.get_text(strip=True)
+            if "Примечание" in text:
+                parent = span.parent
+                if not parent:
+                    continue
+                full_text = parent.get_text(strip=True)
+                note = re.sub(r"Примечание\s*:?\s*", "", full_text).strip()
+                note = re.sub(r"\s+", "", note)
+                return note
+        return ""
 
     async def get_schedule_for_date(self, group_id: str, target_date: str):
-        """
-        target_date: строка YYYY-MM-DD
-        Возвращает список занятий на эту дату.
-        """
         target = datetime.strptime(target_date, "%Y-%m-%d").date()
         target_weekday = target.weekday()
 
@@ -152,9 +154,9 @@ class HerzenParser:
 
             items = block.find_all("li")
             for item in items:
-                time_div = item.find("div", class_=re.compile(r"font-bold.*self-center|text-lg.*font-bold"))
+                time_div = item.find("div", style=re.compile(r"width.*110"))
                 if not time_div:
-                    time_div = item.find("div", style=re.compile(r"width.*110"))
+                    time_div = item.find("div", class_=re.compile(r"font-bold.*self-center|text-lg.*font-bold"))
                 if not time_div:
                     continue
 
@@ -209,4 +211,4 @@ class HerzenParser:
                     "note": note,
                 })
 
-        return sorted(lessons, key=lambda x: x["time_start"])
+        return sorted(lessons, key=lambda x: _time_to_minutes(x["time_start"]))

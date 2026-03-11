@@ -73,16 +73,6 @@ class HerzenParser:
             logger.error(f"get_schedule_for_date error: {e}")
             return []
 
-    async def get_schedule_week(self, group_id: int, ref_date: date) -> dict:
-        result = {}
-        day_keys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        for delta in [-1, 0, 1]:
-            d = ref_date + timedelta(days=delta)
-            key = day_keys[d.weekday()]
-            lessons = await self.get_schedule_for_date(group_id, d)
-            result[key] = lessons
-        return result
-
     def _parse_day(self, html: str, target: date) -> list:
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
@@ -90,7 +80,6 @@ class HerzenParser:
         date_str_full = target.strftime("%d.%m.%Y")
         date_str_nodot = target.strftime("%-d.%-m.%Y")
 
-        # Ищем блок с нужной датой через <time> теги
         time_tags = soup.find_all("time")
         target_block = None
 
@@ -156,11 +145,24 @@ class HerzenParser:
                         lesson_type = val
                         break
 
-        # Преподаватель
+        # Преподаватель + ссылка
         teacher = ""
+        teacher_url = ""
         for a in li.find_all("a", href=True):
             if "teachers" in a["href"]:
                 teacher = a.get_text(strip=True)
+                href = a["href"]
+                if href.startswith("http"):
+                    teacher_url = href
+                else:
+                    teacher_url = "https://atlas.herzen.spb.ru" + href if href.startswith("/") else href
+                break
+
+        # Ссылка на курс в Moodle (ищем ссылки на moodle)
+        moodle_url = ""
+        for a in li.find_all("a", href=True):
+            if "moodle" in a["href"].lower() or "lms" in a["href"].lower():
+                moodle_url = a["href"]
                 break
 
         # Аудитория
@@ -194,6 +196,8 @@ class HerzenParser:
             "subject": subject,
             "type": lesson_type,
             "teacher": teacher,
+            "teacher_url": teacher_url,
+            "moodle_url": moodle_url,
             "room": room,
             "is_remote": is_remote,
             "note": note,

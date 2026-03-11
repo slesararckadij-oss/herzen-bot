@@ -51,7 +51,7 @@ def webhook():
             })
     return "ok"
 
+# В самом низу main.py измени на это:
 if __name__ == "__main__":
-    if WEBAPP_URL and BOT_TOKEN:
-        requests.post(f"{API}/setWebhook", json={"url": f"{WEBAPP_URL}/webhook"})
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 10000)) # Render любит 10000 по умолчанию
+    app.run(host="0.0.0.0", port=port)

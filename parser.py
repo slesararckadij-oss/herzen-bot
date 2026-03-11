@@ -68,10 +68,16 @@ class HerzenParser:
         return sorted(groups, key=lambda x: x["name"])
 
     def _date_in_range(self, target: date, note: str) -> bool:
+        """
+        Проверяет, попадает ли target в диапазон дат из примечания.
+        Поддерживает форматы: "01.09 — 31.12", "01.09", "по чётным", и т.д.
+        Если дата не указана в примечании — занятие считается актуальным.
+        """
         note = note.strip()
         year = target.year
 
-        range_match = re.match(
+        # Диапазон дат: "01.09 — 31.12" или "01.09-31.12"
+        range_match = re.search(
             r"(\d{1,2})\.(\d{1,2})\s*[—\-–]\s*(\d{1,2})\.(\d{1,2})", note
         )
         if range_match:
@@ -85,7 +91,8 @@ class HerzenParser:
             except ValueError:
                 return True
 
-        single_match = re.match(r"(\d{1,2})\.(\d{1,2})$", note)
+        # Одиночная дата: "01.09"
+        single_match = re.search(r"\b(\d{1,2})\.(\d{1,2})\b", note)
         if single_match:
             d1, m1 = map(int, single_match.groups())
             try:
@@ -123,6 +130,29 @@ class HerzenParser:
                 return note
         return ""
 
+    def _get_week_type(self, target: date) -> str:
+        """Возвращает тип недели: 'even' (чётная) или 'odd' (нечётная)."""
+        week_number = target.isocalendar()[1]
+        return "even" if week_number % 2 == 0 else "odd"
+
+    def _check_week_parity(self, note: str, target: date) -> bool:
+        """
+        Проверяет чётность/нечётность недели если указано в примечании.
+        Если в примечании нет указания на чётность — возвращает True.
+        """
+        note_lower = note.lower()
+        week_type = self._get_week_type(target)
+
+        has_even = any(w in note_lower for w in ["чётн", "четн", "чет."])
+        has_odd = any(w in note_lower for w in ["нечётн", "нечетн", "нечет."])
+
+        if has_even and not has_odd:
+            return week_type == "even"
+        if has_odd and not has_even:
+            return week_type == "odd"
+
+        return True
+
     async def get_schedule_for_date(self, group_id: str, target_date: str):
         target = datetime.strptime(target_date, "%Y-%m-%d").date()
         target_weekday = target.weekday()
@@ -133,7 +163,6 @@ class HerzenParser:
 
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
-        # Дедупликация: ключ = (время_начала, предмет)
         seen_keys = set()
 
         day_blocks = soup.find_all(
@@ -167,14 +196,19 @@ class HerzenParser:
                     continue
 
                 note = self._get_note(item)
+
+                # Проверяем диапазон дат
                 if note and not self._date_in_range(target, note):
+                    continue
+
+                # Проверяем чётность недели
+                if note and not self._check_week_parity(note, target):
                     continue
 
                 subject = self._get_subject(item)
                 if not subject or len(subject) < 3:
                     continue
 
-                # Дедупликация — пропускаем если уже добавили такую же пару
                 dedup_key = (time_match.group(1), subject)
                 if dedup_key in seen_keys:
                     continue

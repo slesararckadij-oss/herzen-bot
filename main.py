@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBAPP_URL = os.environ.get("WEBAPP_URL")
+RENDER_URL = os.environ.get("RENDER_URL", "")  # URL вашего сервиса на Render (например: https://my-bot.onrender.com)
 API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = Flask(__name__, static_folder="webapp")
@@ -85,7 +86,6 @@ def send_message(chat_id, text, reply_markup=None):
         logger.error(f"sendMessage error: {e}")
 
 def set_menu_button(chat_id):
-    """Ставит кнопку меню (Menu Button) для конкретного чата."""
     try:
         requests.post(f"{API}/setChatMenuButton", json={
             "chat_id": chat_id,
@@ -98,9 +98,29 @@ def set_menu_button(chat_id):
     except Exception as e:
         logger.error(f"setChatMenuButton error: {e}")
 
+# ─── KEEP-ALIVE (для бесплатного Render) ─────────────────
+def keep_alive_ping():
+    """
+    Пингует собственный сервис, чтобы он не засыпал на бесплатном плане Render.
+    Render бесплатно засыпает после 15 минут неактивности.
+    """
+    if not RENDER_URL:
+        return
+    try:
+        r = requests.get(f"{RENDER_URL}/ping", timeout=10)
+        logger.info(f"Keep-alive ping: {r.status_code}")
+    except Exception as e:
+        logger.error(f"Keep-alive ping error: {e}")
+
 # ─── REMINDERS ───────────────────────────────────────────
 def check_and_send_reminders():
-    now = datetime.now()
+    """
+    Проверяет расписание и отправляет напоминания за remind_min минут до пары.
+    Использует московское время (UTC+3).
+    """
+    import pytz
+    moscow_tz = pytz.timezone("Europe/Moscow")
+    now = datetime.now(moscow_tz).replace(tzinfo=None)
     today_str = now.strftime("%Y-%m-%d")
     users = get_all_users()
 
@@ -108,6 +128,9 @@ def check_and_send_reminders():
         chat_id = user["chat_id"]
         group_id = user["group_id"]
         remind_min = user.get("remind_min", 15)
+
+        if remind_min == 0:
+            continue
 
         try:
             lessons = run_async(parser.get_schedule_for_date(group_id, today_str))
@@ -119,7 +142,6 @@ def check_and_send_reminders():
             try:
                 lesson_time = datetime.strptime(f"{today_str} {lesson['time_start']}", "%Y-%m-%d %H:%M")
                 diff_minutes = (lesson_time - now).total_seconds() / 60
-                # Отправляем если до пары осталось remind_min ± 1 минута
                 if remind_min - 1 <= diff_minutes <= remind_min + 1:
                     text = (
                         f"🔔 <b>Напоминание о паре!</b>\n\n"
@@ -139,13 +161,20 @@ def check_and_send_reminders():
 
 # ─── SCHEDULER ───────────────────────────────────────────
 scheduler = BackgroundScheduler(timezone="Europe/Moscow")
-scheduler.add_job(check_and_send_reminders, "interval", minutes=1)
+scheduler.add_job(check_and_send_reminders, "interval", minutes=1, id="reminders")
+# Keep-alive каждые 13 минут (Render засыпает через 15)
+scheduler.add_job(keep_alive_ping, "interval", minutes=13, id="keepalive")
 scheduler.start()
 
 # ─── FLASK ROUTES ────────────────────────────────────────
 @app.route("/")
 def index():
     return send_from_directory("webapp", "index.html")
+
+@app.route("/ping")
+def ping():
+    """Endpoint для keep-alive пинга."""
+    return "pong", 200
 
 @app.route("/api/groups")
 def api_groups():
@@ -162,7 +191,6 @@ def api_schedule():
 
 @app.route("/api/set_reminder", methods=["POST"])
 def api_set_reminder():
-    """Вызывается из WebApp для сохранения настроек напоминания."""
     data = request.json
     chat_id = data.get("chat_id")
     group_id = data.get("group_id")
@@ -187,7 +215,6 @@ def webhook():
     if not data:
         return "ok"
 
-    # Обычное сообщение
     if "message" in data:
         msg = data["message"]
         chat_id = msg["chat"]["id"]
@@ -208,7 +235,6 @@ def webhook():
             )
 
         elif text.startswith("/remind"):
-            # /remind 15 — установить напоминание за 15 минут
             parts = text.split()
             if len(parts) == 2 and parts[1].isdigit():
                 minutes = int(parts[1])
@@ -224,7 +250,6 @@ def webhook():
             upsert_user(chat_id, remind_min=0)
             send_message(chat_id, "🔕 Напоминания отключены.")
 
-    # Данные из WebApp
     if "message" in data and data["message"].get("web_app_data"):
         chat_id = data["message"]["chat"]["id"]
         try:

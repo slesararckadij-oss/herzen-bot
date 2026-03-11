@@ -18,15 +18,13 @@ class HerzenParser:
         }
 
     async def _get(self, url: str) -> str:
-        """Безопасный запрос с автоматическим закрытием сессии"""
         async with aiohttp.ClientSession(headers=self.headers) as session:
             try:
-                async with session.get(url, timeout=20) as r:
-                    if r.status != 200:
-                        return ""
+                async with session.get(url, timeout=15) as r:
+                    if r.status != 200: return ""
                     return await r.text(encoding="utf-8", errors="replace")
             except Exception as e:
-                logger.error(f"Request error: {e}")
+                logger.error(f"Network error: {e}")
                 return ""
 
     async def get_all_groups(self) -> list:
@@ -36,140 +34,81 @@ class HerzenParser:
         groups, seen = [], set()
         for a in soup.find_all("a", href=True):
             m = re.search(r"/schedule/(\d+)", a["href"])
-            if m:
-                gid, name = m.group(1), a.get_text(strip=True)
-                if name and gid not in seen:
-                    seen.add(gid)
-                    groups.append({"id": gid, "name": name})
+            if m and (name := a.get_text(strip=True)):
+                gid = m.group(1)
+                if gid not in seen:
+                    seen.add(gid); groups.append({"id": gid, "name": name})
         return groups
 
     async def get_schedule_for_date(self, group_id, target_date) -> list:
-        """Исправлена ошибка strftime: принимает и строку, и объект date"""
+        # Фикс ошибки 'str' object has no attribute 'strftime'
         if isinstance(target_date, str):
             date_str = target_date
         else:
             date_str = target_date.strftime("%Y-%m-%d")
-
+        
         html = await self._get(f"{BASE_URL}/schedule/{group_id}/classes")
         if not html: return []
 
-        # 1. Пробуем вытащить данные из JSON (Livewire)
-        all_lessons = self._extract_from_snapshot(html)
+        # 1. Пробуем JSON снапшот
+        lessons = self._extract_from_snapshot(html, date_str)
         
-        # 2. Если JSON пуст, парсим сам HTML (Fallback)
-        if not all_lessons:
-            logger.info(f"Snapshot not found for group {group_id}, using HTML fallback")
-            all_lessons = self._fallback_parse_html(html, date_str)
+        # 2. Если пусто — агрессивно парсим HTML
+        if not lessons:
+            logger.info(f"Fallback to HTML for {date_str}")
+            lessons = self._fallback_parse_html(html, date_str)
 
-        filtered = []
-        for l in all_lessons:
-            if l.get("_date") == date_str:
-                res = l.copy()
-                res.pop("_date", None)
-                filtered.append(res)
-        
-        logger.info(f"Final: found {len(filtered)} lessons for {date_str}")
-        return filtered
+        return lessons
 
-    def _extract_from_snapshot(self, html: str) -> list:
-        soup = BeautifulSoup(html, "html.parser")
-        tag = soup.find(attrs={"wire:snapshot": True})
-        js_raw = tag["wire:snapshot"] if tag else None
-        
-        if not js_raw:
-            m = re.search(r'wire:snapshot="([^"]+)"', html)
-            if m: js_raw = m.group(1).replace("&quot;", '"')
-        
-        if not js_raw: return []
-
+    def _extract_from_snapshot(self, html: str, target_date_str: str) -> list:
         try:
-            data = json.loads(js_raw).get("data", {}).get("schedule", [])
-            lessons = []
-            for day in data:
+            m = re.search(r'wire:snapshot="([^"]+)"', html)
+            if not m: return []
+            data = json.loads(m.group(1).replace("&quot;", '"'))
+            schedule = data.get("data", {}).get("schedule", [])
+            result = []
+            for day in schedule:
                 items = day if isinstance(day, list) else [day]
                 for item in items:
-                    if isinstance(item, dict):
-                        parsed = self._parse_json_item(item)
-                        if parsed: lessons.append(parsed)
-            return lessons
+                    if not isinstance(item, dict): continue
+                    raw_d = item.get("SCHEDULE_DATE", "")
+                    norm_d = raw_d[:10] if "-" in raw_d else f"{raw_d[6:10]}-{raw_d[3:5]}-{raw_d[0:2]}"
+                    if norm_d == target_date_str:
+                        teacher = item.get("ROWS", [{}])[0].get("TEACHER_NAME", "") if item.get("ROWS") else ""
+                        result.append({
+                            "time_start": item.get("TIME_START", ""),
+                            "time_end": item.get("TIME_END", ""),
+                            "subject": (item.get("PNAME") or item.get("NAME_DISC") or "Занятие").strip(),
+                            "type": "Занятие",
+                            "teacher": teacher.strip(),
+                            "room": (item.get("ROOM_NAME") or "").strip(),
+                            "moodle_url": (item.get("E_COURSE_URL") or "").replace("\\/", "/"),
+                            "is_remote": "дистанц" in str(item).lower()
+                        })
+            return result
         except: return []
 
-    def _parse_json_item(self, item: dict) -> dict | None:
-        subject = item.get("PNAME") or item.get("NAME_DISC") or ""
-        time_s = item.get("TIME_START", "")
-        if not subject or not time_s: return None
-
-        date_raw = item.get("SCHEDULE_DATE", "")
-        date_norm = ""
-        if "-" in date_raw: date_norm = date_raw[:10]
-        elif "." in date_raw:
-            p = date_raw.split(".")
-            if len(p) == 3: date_norm = f"{p[2]}-{p[1]}-{p[0]}"
-
-        rows = item.get("ROWS", [])
-        teacher = rows[0].get("TEACHER_NAME", "") if rows and isinstance(rows[0], dict) else ""
-        
-        return {
-            "time_start": time_s,
-            "time_end": item.get("TIME_END", ""),
-            "subject": subject.strip(),
-            "type": self._map_type(item.get("LECTYPE", "") or str(item.get("ID_LECTYPE", ""))),
-            "teacher": teacher.strip(),
-            "teacher_url": f"{BASE_URL}/teachers/{item.get('ID_TEACHER')}" if item.get('ID_TEACHER') else "",
-            "moodle_url": (item.get("E_COURSE_URL") or "").replace("\\/", "/"),
-            "room": (item.get("ROOM_NAME") or "").strip(),
-            "is_remote": any(x in subject.lower() for x in ["дистанц", "видео", "online"]),
-            "_date": date_norm
-        }
-
     def _fallback_parse_html(self, html: str, target_date_str: str) -> list:
-        """Запасной парсер: ищет дату в тексте и собирает блоки li"""
         soup = BeautifulSoup(html, "html.parser")
+        site_date = f"{target_date_str[8:10]}.{target_date_str[5:7]}.{target_date_str[0:4]}"
         lessons = []
-        try:
-            d_obj = datetime.strptime(target_date_str, "%Y-%m-%d")
-            site_date = d_obj.strftime("%d.%m.%Y")
-        except: site_date = target_date_str
-
-        # Ищем контейнер с нужной датой
-        target_day = None
-        for block in soup.find_all(['div', 'li', 'span']):
-            if site_date in block.get_text():
-                target_day = block.find_parent(['div', 'ol']) or block.parent
-                break
-        
-        if not target_day: return []
-
-        for li in target_day.find_all('li'):
-            text = li.get_text(separator=" ", strip=True)
-            times = re.findall(r'\d{1,2}:\d{2}', text)
+        date_node = soup.find(string=re.compile(site_date))
+        if not date_node: return []
+        container = date_node.find_parent(["div", "section", "li", "ol"]) or soup
+        for li in container.find_all("li"):
+            text = li.get_text(" ", strip=True)
+            times = re.findall(r"\d{1,2}:\d{2}", text)
             if not times: continue
-
-            # Ссылки и метаданные
-            moodle = li.find('a', href=re.compile(r'moodle'))
-            t_link = li.find('a', href=re.compile(r'teachers|atlas'))
-            
-            sub = text
-            for t in times: sub = sub.replace(t, "")
-            sub = re.sub(r'(лекц|практ|сем|Занятие|ауд\.|корп\.)', '', sub, flags=re.I).strip()
-
+            moodle = li.find("a", href=re.compile(r"moodle"))
+            t_link = li.find("a", href=re.compile(r"teachers|atlas"))
             lessons.append({
                 "time_start": times[0],
                 "time_end": times[1] if len(times) > 1 else "",
-                "subject": sub.split("Примечание")[0].strip(),
+                "subject": text.split(times[-1])[-1].replace("Занятие", "").strip() or "Занятие",
                 "type": "Занятие",
                 "teacher": t_link.get_text(strip=True) if t_link else "",
-                "teacher_url": t_link['href'] if t_link else "",
-                "moodle_url": moodle['href'] if moodle else "",
-                "room": re.search(r'ауд\.\s*[\w\d, ]+', text, re.I).group(0) if "ауд." in text else "",
-                "is_remote": any(x in text.lower() for x in ["дистанц", "видео", "online"]),
-                "_date": target_date_str
+                "moodle_url": moodle["href"] if moodle else "",
+                "room": "ауд." + text.split("ауд.")[-1][:10].strip() if "ауд." in text else "",
+                "is_remote": "дистанц" in text.lower()
             })
         return lessons
-
-    def _map_type(self, raw: str) -> str:
-        raw = raw.lower()
-        if "лек" in raw or raw == "1": return "Лекция"
-        if "практ" in raw or raw == "2": return "Практика"
-        if "сем" in raw or raw == "3": return "Семинар"
-        return "Занятие"

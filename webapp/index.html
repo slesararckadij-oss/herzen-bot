@@ -230,7 +230,6 @@
         let currentGroupId = localStorage.getItem('selected_group_id');
         let selectedDate = new Date();
 
-        // Календарь
         const fp = flatpickr("#datePicker", {
             locale: "ru",
             dateFormat: "Y-m-d",
@@ -261,19 +260,23 @@
 
         function renderGroups(groups) {
             const select = document.getElementById('groupSelect');
-            const savedValue = select.value;
+            const savedValue = select.value || currentGroupId;
             select.innerHTML = '<option value="">Выберите группу</option>';
             groups.forEach(g => {
                 const opt = new Option(g.name, g.id);
                 select.add(opt);
             });
-            if (groups.find(g => g.id === savedValue)) select.value = savedValue;
+            if (savedValue) select.value = savedValue;
         }
 
         function filterGroups() {
             const val = document.getElementById('groupSearch').value.toLowerCase();
             const filtered = allGroups.filter(g => g.name.toLowerCase().includes(val));
-            renderGroups(filtered);
+            const select = document.getElementById('groupSelect');
+            select.innerHTML = '<option value="">Выберите группу</option>';
+            filtered.slice(0, 100).forEach(g => {
+                select.add(new Option(g.name, g.id));
+            });
         }
 
         function onGroupChange(id) {
@@ -286,10 +289,9 @@
             selectedDate = new Date();
             selectedDate.setDate(selectedDate.getDate() + offset);
             
-            // Визуал табов
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            const ids = ['tab-yesterday', 'tab-today', 'tab-tomorrow'];
-            document.getElementById(ids[offset + 1]).classList.add('active');
+            const tabs = ['tab-yesterday', 'tab-today', 'tab-tomorrow'];
+            document.getElementById(tabs[offset + 1]).classList.add('active');
             
             loadSchedule();
         }
@@ -303,7 +305,7 @@
             const label = document.getElementById('currentDateLabel');
             
             if (!currentGroupId) {
-                list.innerHTML = '<div class="empty">Выберите группу в списке выше 👆</div>';
+                list.innerHTML = '<div class="empty">Выберите группу 👆</div>';
                 return;
             }
 
@@ -335,12 +337,15 @@
                     </div>
                 `).join('');
             } catch (e) {
-                list.innerHTML = '<div class="empty">Ошибка сети ❌ Попробуйте позже.</div>';
+                list.innerHTML = '<div class="empty">Ошибка сети ❌</div>';
             }
         }
 
         function loadWeek(mode) {
-            alert("Функция просмотра всей недели будет добавлена в следующем обновлении бэкенда!");
+            // Реализация переключения на неделю (логика на фронте)
+            if (mode === 'current') {
+                alert("Функция показа всей недели настраивается. Пока используйте календарь.");
+            }
         }
 
         init();

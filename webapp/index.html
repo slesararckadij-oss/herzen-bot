@@ -1,142 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Расписание</title>
     <style>
-        :root { --bg: #000; --card: #1c1c1e; --accent: #0a84ff; --text: #fff; --sec: #8e8e93; --border: #2c2c2e; }
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); padding: 15px; min-height: 100vh; }
-
-        /* HEADER */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-size: 14px; color: var(--sec); }
-
-        /* TABS */
-        .nav { display: flex; gap: 15px; color: var(--sec); font-size: 14px; margin-bottom: 16px; cursor: pointer; }
-        .nav .active { color: var(--accent); font-weight: bold; }
-
-        /* GROUP */
-        .group-title { font-size: 28px; font-weight: bold; margin-bottom: 4px; }
-        .date-sub { color: var(--sec); text-transform: uppercase; font-size: 12px; letter-spacing: 0.05em; margin-bottom: 16px; }
-
-        /* GROUP SELECTOR BUTTON */
-        .group-btn {
-            width: 100%; background: var(--card); border: 1px solid var(--border);
-            color: var(--sec); padding: 12px 14px; border-radius: 10px;
-            margin-bottom: 20px; text-align: left; font-size: 15px;
-            display: flex; justify-content: space-between; align-items: center;
-            cursor: pointer;
-        }
-        .group-btn .chevron { color: var(--sec); font-size: 12px; }
-
-        /* MODAL */
-        .modal-overlay {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.75); z-index: 999;
-            align-items: flex-end; backdrop-filter: blur(4px);
-        }
-        .modal-overlay.open { display: flex; }
-        .modal {
-            background: #1c1c1e; border-radius: 20px 20px 0 0;
-            width: 100%; max-height: 85vh; display: flex; flex-direction: column;
-            padding: 16px;
-        }
-        .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 12px; text-align: center; }
-        .search-box {
-            background: #2c2c2e; border: none; color: #fff;
-            padding: 10px 14px; border-radius: 10px; width: 100%;
-            font-size: 15px; margin-bottom: 10px; outline: none;
-        }
-        .search-box::placeholder { color: var(--sec); }
-        .groups-list { overflow-y: auto; flex: 1; }
-        .group-item {
-            padding: 14px 10px; border-bottom: 1px solid var(--border);
-            font-size: 15px; cursor: pointer;
-        }
-        .group-item:active { background: #2c2c2e; }
-        .group-item.selected { color: var(--accent); font-weight: 600; }
-        .groups-empty { color: var(--sec); text-align: center; padding: 30px; font-size: 14px; }
-
-        /* LESSONS */
-        .lesson { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 12px; }
-        .l-head { display: flex; justify-content: space-between; color: var(--sec); font-size: 13px; margin-bottom: 8px; }
-        .l-name { font-size: 16px; font-weight: 600; margin-bottom: 10px; line-height: 1.3; }
-        .l-foot { font-size: 13px; color: var(--sec); display: flex; flex-direction: column; gap: 5px; }
-        .l-foot a { color: var(--accent); text-decoration: none; }
-        .l-foot a:active { opacity: 0.7; }
-        .l-note { font-size: 12px; color: var(--sec); margin-top: 6px; font-style: italic; }
-        .remote-badge { display: inline-block; background: rgba(88,86,214,0.2); color: #5e5ce6; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; margin-top: 6px; }
-
-        /* EMPTY / LOADING */
-        .empty { text-align: center; padding: 60px 20px; color: var(--sec); font-size: 15px; }
-        .empty .big { font-size: 48px; margin-bottom: 12px; }
-        .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 40px auto; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        :root { --bg: #0f0f0f; --card: #1c1c1e; --text: #ffffff; --hint: #8e8e93; --blue: #0a84ff; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .header { margin-bottom: 20px; }
+        select { width: 100%; padding: 12px; background: var(--card); color: #fff; border: 1px solid #333; border-radius: 10px; font-size: 16px; margin-bottom: 15px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { flex: 1; padding: 10px; text-align: center; background: var(--card); border-radius: 8px; font-size: 14px; cursor: pointer; }
+        .tab.active { background: var(--blue); }
+        .lesson { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 12px; border-left: 4px solid var(--blue); }
+        .time { font-size: 14px; color: var(--hint); margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .subject { font-size: 16px; font-weight: bold; margin-bottom: 8px; line-height: 1.3; }
+        .info { font-size: 14px; color: var(--hint); display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+        .link-btn { display: inline-block; margin-top: 10px; color: var(--blue); text-decoration: none; font-size: 14px; border: 1px solid var(--blue); padding: 5px 10px; border-radius: 5px; }
+        a { color: var(--blue); text-decoration: none; }
+        .empty { text-align: center; color: var(--hint); margin-top: 50px; }
     </style>
 </head>
 <body>
-    <div class="header"><span>Расписание занятий ✅</span><span>📅</span></div>
-
-    <div class="nav">
-        <span id="tab-yesterday" onclick="switchTab(-1)">Вчера</span>
-        <span id="tab-today" class="active" onclick="switchTab(0)">Сегодня</span>
-        <span id="tab-tomorrow" onclick="switchTab(1)">Завтра</span>
+    <div class="header">
+        <select id="groupSelect" onchange="changeGroup(this.value)">
+            <option value="">Выберите группу...</option>
+        </select>
     </div>
 
-    <div id="group-display" class="group-title">Выберите группу</div>
-    <div id="date-display" class="date-sub"></div>
-
-    <button class="group-btn" id="group-btn" onclick="openModal()">
-        <span id="group-btn-label">Загрузка...</span>
-        <span class="chevron">▼</span>
-    </button>
+    <div class="tabs">
+        <div class="tab" onclick="loadSchedule(-1)">Вчера</div>
+        <div class="tab active" onclick="loadSchedule(0)">Сегодня</div>
+        <div class="tab" onclick="loadSchedule(1)">Завтра</div>
+    </div>
 
     <div id="list"></div>
 
-    <!-- MODAL -->
-    <div class="modal-overlay" id="modal-overlay" onclick="overlayClick(event)">
-        <div class="modal">
-            <h2>Выбрать группу</h2>
-            <input class="search-box" id="search-input" placeholder="Поиск: СПП, ФИЗ, 2об..." oninput="filterGroups()">
-            <div class="groups-list" id="groups-list"></div>
-        </div>
-    </div>
-
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-
-        let allGroups = [];
-        let currentGroupId = localStorage.getItem('groupId') || null;
-        let currentGroupName = localStorage.getItem('groupName') || null;
+        let currentGroupId = localStorage.getItem('herzen_group_id');
         let currentOffset = 0;
 
-        // ===== INIT =====
         async function init() {
-            updateDateDisplay(0);
-            updateGroupDisplay();
-            await loadGroups();
-            if (currentGroupId) {
-                loadSchedule(0);
-            }
-        }
-
-        // ===== TABS =====
-        function switchTab(offset) {
-            currentOffset = offset;
-            ['yesterday','today','tomorrow'].forEach((id, i) => {
-                document.getElementById('tab-' + id).classList.toggle('active', i - 1 === offset);
+            const r = await fetch('/api/groups');
+            const data = await r.json();
+            const select = document.getElementById('groupSelect');
+            data.groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g.id; opt.textContent = g.name;
+                if (g.id === currentGroupId) opt.selected = true;
+                select.appendChild(opt);
             });
-            updateDateDisplay(offset);
-            if (currentGroupId) loadSchedule(offset);
+            if (currentGroupId) loadSchedule(0);
         }
 
-        function updateDateDisplay(offset) {
-            const d = new Date();
-            d.setDate(d.getDate() + offset);
-            document.getElementById('date-display').innerText =
-                d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+        function changeGroup(id) {
+            currentGroupId = id;
+            localStorage.setItem('herzen_group_id', id);
+            loadSchedule(0);
         }
 
         function getDateStr(offset) {
@@ -145,122 +65,29 @@
             return d.toISOString().split('T')[0];
         }
 
-        // ===== SCHEDULE =====
         async function loadSchedule(offset) {
-            if (!currentGroupId) return;
-            document.getElementById('list').innerHTML = '<div class="spinner"></div>';
-            try {
-                const date = getDateStr(offset);
-                const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${date}`);
-                const data = await r.json();
-                render(data.lessons || []);
-            } catch(e) {
-                document.getElementById('list').innerHTML = '<div class="empty"><div class="big">😕</div>Ошибка загрузки</div>';
-            }
-        }
-
-        function render(lessons) {
-            const c = document.getElementById('list');
-            if (!lessons.length) {
-                c.innerHTML = '<div class="empty"><div class="big">🎉</div>Пар нет!</div>';
-                return;
-            }
-            c.innerHTML = lessons.map(l => {
-                const teacherHtml = l.teacher
-                    ? (l.teacher_url
-                        ? `<span>👤 <a href="${l.teacher_url}" target="_blank">${l.teacher}</a></span>`
-                        : `<span>👤 ${l.teacher}</span>`)
-                    : '';
-                const moodleHtml = l.moodle_url
-                    ? `<span>📚 <a href="${l.moodle_url}" target="_blank">Открыть в Moodle</a></span>`
-                    : '';
-                const roomHtml = l.room ? `<span>🏛 ${l.room}</span>` : '';
-                const noteHtml = l.note ? `<div class="l-note">📌 ${l.note}</div>` : '';
-                const remoteBadge = l.is_remote ? `<div class="remote-badge">💻 Дистанционно</div>` : '';
-                return `
+            currentOffset = offset;
+            document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === offset + 1));
+            const list = document.getElementById('list');
+            if (!currentGroupId) { list.innerHTML = '<div class="empty">Сначала выберите группу</div>'; return; }
+            
+            list.innerHTML = '<div class="empty">Загрузка...</div>';
+            const date = getDateStr(offset);
+            const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${date}`);
+            const data = await r.json();
+            
+            list.innerHTML = data.lessons.length ? '' : '<div class="empty">Пар нет 🥳</div>';
+            data.lessons.forEach(l => {
+                list.innerHTML += `
                     <div class="lesson">
-                        <div class="l-head"><span>${l.time_start} – ${l.time_end}</span><span>${l.type}</span></div>
-                        <div class="l-name">${l.subject}</div>
-                        <div class="l-foot">
-                            ${roomHtml}
-                            ${teacherHtml}
-                            ${moodleHtml}
-                        </div>
-                        ${noteHtml}
-                        ${remoteBadge}
+                        <div class="time"><span>${l.time_start} – ${l.time_end}</span><span>${l.type}</span></div>
+                        <div class="subject">${l.subject}</div>
+                        <div class="info">📍 ${l.room || 'Не указана'}</div>
+                        <div class="info">👤 ${l.teacher_url ? `<a href="${l.teacher_url}" target="_blank">${l.teacher}</a>` : l.teacher}</div>
+                        ${l.moodle_url ? `<a href="${l.moodle_url}" target="_blank" class="link-btn">Открыть в Moodle</a>` : ''}
                     </div>`;
-            }).join('');
+            });
         }
-
-        // ===== GROUP MODAL =====
-        async function loadGroups() {
-            try {
-                const r = await fetch('/api/groups');
-                const d = await r.json();
-                allGroups = d.groups || [];
-                document.getElementById('group-btn-label').textContent =
-                    currentGroupName || 'Выбрать группу...';
-            } catch(e) {
-                document.getElementById('group-btn-label').textContent = 'Ошибка загрузки';
-            }
-        }
-
-        function openModal() {
-            document.getElementById('modal-overlay').classList.add('open');
-            document.getElementById('search-input').value = '';
-            renderGroupList(allGroups);
-            setTimeout(() => document.getElementById('search-input').focus(), 100);
-        }
-
-        function overlayClick(e) {
-            if (e.target === document.getElementById('modal-overlay')) closeModal();
-        }
-
-        function closeModal() {
-            document.getElementById('modal-overlay').classList.remove('open');
-        }
-
-        function filterGroups() {
-            const q = document.getElementById('search-input').value.toLowerCase().trim();
-            const filtered = q ? allGroups.filter(g => g.name.toLowerCase().includes(q)) : allGroups;
-            renderGroupList(filtered);
-        }
-
-        function renderGroupList(groups) {
-            const list = document.getElementById('groups-list');
-            if (!groups.length) {
-                list.innerHTML = '<div class="groups-empty">Ничего не найдено</div>';
-                return;
-            }
-            // Показываем все если есть поиск, иначе первые 80
-            const show = document.getElementById('search-input').value ? groups : groups.slice(0, 80);
-            list.innerHTML = show.map(g =>
-                `<div class="group-item ${g.id == currentGroupId ? 'selected' : ''}" onclick="selectGroup(${g.id}, '${escapeQ(g.name)}')">${g.name}</div>`
-            ).join('');
-        }
-
-        function selectGroup(id, name) {
-            currentGroupId = id;
-            currentGroupName = name;
-            localStorage.setItem('groupId', id);
-            localStorage.setItem('groupName', name);
-            updateGroupDisplay();
-            closeModal();
-            loadSchedule(currentOffset);
-            tg.sendData(JSON.stringify({ action: "set_group", group_id: id, group_name: name }));
-        }
-
-        function updateGroupDisplay() {
-            if (currentGroupName) {
-                document.getElementById('group-display').innerText = currentGroupName;
-                document.getElementById('group-btn-label').textContent = currentGroupName;
-            } else {
-                document.getElementById('group-display').innerText = 'Выберите группу';
-            }
-        }
-
-        function escapeQ(s) { return s.replace(/'/g, "\\'"); }
-
         init();
     </script>
 </body>

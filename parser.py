@@ -111,10 +111,6 @@ class HerzenParser:
         return ""
 
     def _get_note(self, item) -> str:
-        """
-        Ищет только тег <span>, текст которого содержит 'Примечание'.
-        Это исключает теги с классом italic у названия предмета.
-        """
         for span in item.find_all("span"):
             text = span.get_text(strip=True)
             if "Примечание" in text:
@@ -123,7 +119,7 @@ class HerzenParser:
                     continue
                 full_text = parent.get_text(strip=True)
                 note = re.sub(r"Примечание\s*:?\s*", "", full_text).strip()
-                note = re.sub(r"\s+", "", note)
+                note = re.sub(r"\s+", " ", note)
                 return note
         return ""
 
@@ -137,6 +133,8 @@ class HerzenParser:
 
         soup = BeautifulSoup(html, "html.parser")
         lessons = []
+        # Дедупликация: ключ = (время_начала, предмет)
+        seen_keys = set()
 
         day_blocks = soup.find_all(
             "div",
@@ -175,6 +173,12 @@ class HerzenParser:
                 subject = self._get_subject(item)
                 if not subject or len(subject) < 3:
                     continue
+
+                # Дедупликация — пропускаем если уже добавили такую же пару
+                dedup_key = (time_match.group(1), subject)
+                if dedup_key in seen_keys:
+                    continue
+                seen_keys.add(dedup_key)
 
                 item_text = item.get_text(" ", strip=True)
 

@@ -13,7 +13,7 @@
         :root {
             --bg: #000000;
             --card: #121214;
-            --accent: #ff9f0a; /* Тот самый оранжевый */
+            --accent: #ff9f0a;
             --blue: #0a84ff;
             --text: #ffffff;
             --text-sec: #98989d;
@@ -26,10 +26,9 @@
             color: var(--text);
             margin: 0;
             padding: 16px;
-            padding-top: 70px; /* Место под фиксированную шапку */
+            padding-top: 70px;
         }
 
-        /* Шапка с поиском и календарем */
         .header-fixed {
             position: fixed;
             top: 0; left: 0; right: 0;
@@ -42,10 +41,7 @@
             align-items: center;
         }
 
-        .search-wrapper {
-            flex-grow: 1;
-            position: relative;
-        }
+        .search-wrapper { flex-grow: 1; position: relative; }
 
         .search-input {
             width: 100%;
@@ -56,6 +52,7 @@
             color: white;
             font-size: 15px;
             outline: none;
+            box-sizing: border-box;
         }
 
         .icon-btn {
@@ -72,7 +69,6 @@
             font-size: 20px;
         }
 
-        /* Табы и быстрые кнопки */
         .nav-container {
             margin-top: 10px;
             display: flex;
@@ -119,15 +115,15 @@
             font-size: 12px;
             white-space: nowrap;
             border: 1px solid #333;
+            cursor: pointer;
         }
 
-        /* Карточки пар */
         .lesson-card {
             background: var(--card);
             border-radius: var(--br);
             padding: 16px;
             margin-bottom: 14px;
-            border-left: 4px solid var(--accent); /* Оранжевый акцент */
+            border-left: 4px solid var(--accent);
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             animation: fadeIn 0.3s ease-out;
         }
@@ -144,11 +140,7 @@
             margin-bottom: 10px;
         }
 
-        .time-badge {
-            color: var(--accent);
-            font-weight: 700;
-            font-size: 15px;
-        }
+        .time-badge { color: var(--accent); font-weight: 700; font-size: 15px; }
 
         .type-badge {
             background: #2c2c2e;
@@ -159,12 +151,7 @@
             color: var(--text-sec);
         }
 
-        .subject-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            line-height: 1.2;
-        }
+        .subject-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
 
         .info-row {
             display: flex;
@@ -175,10 +162,7 @@
             margin-top: 6px;
         }
 
-        .teacher-link {
-            color: var(--blue);
-            text-decoration: none;
-        }
+        .teacher-link { color: var(--blue); text-decoration: none; }
 
         .moodle-btn {
             margin-top: 15px;
@@ -201,20 +185,12 @@
             border-radius: 12px;
             padding: 10px;
             margin-top: 8px;
+            outline: none;
         }
 
-        .date-display {
-            font-size: 22px;
-            font-weight: 800;
-            margin: 15px 0 5px 0;
-            color: white;
-        }
+        .date-display { font-size: 22px; font-weight: 800; margin: 15px 0 5px 0; color: white; }
 
-        .empty {
-            text-align: center;
-            margin-top: 50px;
-            color: var(--text-sec);
-        }
+        .empty { text-align: center; margin-top: 50px; color: var(--text-sec); }
     </style>
 </head>
 <body>
@@ -240,7 +216,7 @@
         <div class="week-selector">
             <div class="week-btn" onclick="loadWeek('current')">Эта неделя</div>
             <div class="week-btn" onclick="loadWeek('next')">Следующая</div>
-            <div class="week-btn" onclick="alert('Скоро!')">Сессия</div>
+            <div class="week-btn" onclick="alert('Раздел Сессия в разработке')">Сессия</div>
         </div>
     </div>
 
@@ -252,46 +228,46 @@
     <script>
         let allGroups = [];
         let currentGroupId = localStorage.getItem('selected_group_id');
-        let currentOffset = 0;
         let selectedDate = new Date();
 
-        // Настройка календаря
+        // Календарь
         const fp = flatpickr("#datePicker", {
             locale: "ru",
             dateFormat: "Y-m-d",
-            disableMobile: "true", // Чтобы открывался наш стильный вид
-            onChange: function(selectedDates, dateStr) {
+            disableMobile: "true",
+            onChange: function(selectedDates) {
                 selectedDate = selectedDates[0];
-                currentOffset = 0; // Сбрасываем относительный офсет
+                resetTabs();
                 loadSchedule();
             }
         });
 
         document.getElementById('calendarBtn').addEventListener('click', () => fp.open());
 
-        init();
-
         async function init() {
             try {
                 const res = await fetch('/api/groups');
                 const data = await res.json();
-                allGroups = data.groups;
+                allGroups = data.groups || [];
                 renderGroups(allGroups);
+                
                 if (currentGroupId) {
-                    document.getElementById('groupSelect').value = currentGroupId;
+                    const select = document.getElementById('groupSelect');
+                    select.value = currentGroupId;
                     loadSchedule();
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Init error:", e); }
         }
 
         function renderGroups(groups) {
             const select = document.getElementById('groupSelect');
+            const savedValue = select.value;
             select.innerHTML = '<option value="">Выберите группу</option>';
             groups.forEach(g => {
                 const opt = new Option(g.name, g.id);
-                if (g.id === currentGroupId) opt.selected = true;
                 select.add(opt);
             });
+            if (groups.find(g => g.id === savedValue)) select.value = savedValue;
         }
 
         function filterGroups() {
@@ -307,18 +283,19 @@
         }
 
         function changeDate(offset) {
-            currentOffset = offset;
             selectedDate = new Date();
             selectedDate.setDate(selectedDate.getDate() + offset);
             
-            document.querySelectorAll('.tab').forEach((t, i) => {
-                t.classList.toggle('active', i === offset + 1);
-            });
+            // Визуал табов
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            const ids = ['tab-yesterday', 'tab-today', 'tab-tomorrow'];
+            document.getElementById(ids[offset + 1]).classList.add('active');
+            
             loadSchedule();
         }
 
-        function getFormattedDate(date) {
-            return date.toISOString().split('T')[0];
+        function resetTabs() {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         }
 
         async function loadSchedule() {
@@ -326,21 +303,20 @@
             const label = document.getElementById('currentDateLabel');
             
             if (!currentGroupId) {
-                list.innerHTML = '<div class="empty">Выберите группу 👆</div>';
+                list.innerHTML = '<div class="empty">Выберите группу в списке выше 👆</div>';
                 return;
             }
 
-            // Красивая дата для заголовка
             label.innerText = selectedDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
-            list.innerHTML = '<div class="empty">Ищу пары...</div>';
+            list.innerHTML = '<div class="empty">Загрузка расписания... ⏳</div>';
             
-            const dateStr = getFormattedDate(selectedDate);
+            const dateStr = selectedDate.toISOString().split('T')[0];
             try {
                 const r = await fetch(`/api/schedule?group_id=${currentGroupId}&date=${dateStr}`);
                 const data = await r.json();
                 
                 if (!data.lessons || data.lessons.length === 0) {
-                    list.innerHTML = '<div class="empty">Пар нет, можно отдыхать 🥂</div>';
+                    list.innerHTML = '<div class="empty">На этот день пар нет 🥂</div>';
                     return;
                 }
 
@@ -351,17 +327,23 @@
                             <span class="type-badge">${l.type}</span>
                         </div>
                         <div class="subject-title">${l.subject}</div>
-                        <div class="info-row">🏛️ ${l.room || 'Не указана'}</div>
+                        <div class="info-row">🏛️ ${l.room}</div>
                         <div class="info-row">👤 
                             ${l.teacher_url ? `<a href="${l.teacher_url}" target="_blank" class="teacher-link">${l.teacher}</a>` : l.teacher}
                         </div>
-                        ${l.moodle_url ? `<a href="${l.moodle_url}" target="_blank" class="moodle-btn">📚 Перейти в Moodle</a>` : ''}
+                        ${l.moodle_url ? `<a href="${l.moodle_url}" target="_blank" class="moodle-btn">📚 Moodle</a>` : ''}
                     </div>
                 `).join('');
             } catch (e) {
-                list.innerHTML = '<div class="empty">Ошибка загрузки ❌</div>';
+                list.innerHTML = '<div class="empty">Ошибка сети ❌ Попробуйте позже.</div>';
             }
         }
+
+        function loadWeek(mode) {
+            alert("Функция просмотра всей недели будет добавлена в следующем обновлении бэкенда!");
+        }
+
+        init();
     </script>
 </body>
 </html>

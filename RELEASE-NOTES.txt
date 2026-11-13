@@ -1,0 +1,5 @@
+Dayline 0.3.0 debug APK
+Source: e39de749f0afa9c40d78ea179391cdd36735f018, branch dayline-android-v0.3
+Install over v0.2; same signing certificate; versionCode 3.
+Changes: readable habit cards, persistent medal collection, Enter continues lists/checklists, full note reading mode.
+29 JUnit tests passed, Android lint has no errors. Full device UI verification remains for the phone.

@@ -16,6 +16,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -88,6 +89,7 @@ class MainActivity : ComponentActivity() {
 @Composable fun Dayline(vm: DayModel = viewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val s = vm.state; val colors = MaterialTheme.colorScheme
+    val scrollStates = List(5) { rememberLazyListState() }
     var settings by remember { mutableStateOf(false) }
     var digestTime by remember { mutableStateOf(false) }
     var feedDialog by remember { mutableStateOf(false) }
@@ -144,7 +146,7 @@ class MainActivity : ComponentActivity() {
             }
         }, icon = { Icon(Icons.Rounded.Add, "Добавить") }, text = { Text(when (vm.tab) { 2 -> "Заметка"; 3 -> "Будильник"; else -> if (taskPage == 1) "Привычка" else "Задача" }) })
     }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), state = scrollStates[vm.tab], contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (vm.tab) {
                 0 -> {
                     item { HeroCard(s) { vm.tab = 1 } }
@@ -272,6 +274,10 @@ private fun toggleHabit(vm: DayModel, h: Habit) {
     }) }
     if (vm.error == null) earned?.let { vm.reward = h.title to it }
 }
+fun dueLabel(raw: String): String = runCatching {
+    val date = LocalDate.parse(raw)
+    when (date) { LocalDate.now() -> "Срок сегодня"; LocalDate.now().plusDays(1) -> "Срок завтра"; else -> "До " + date.format(DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))) }
+}.getOrDefault(raw)
 fun daysLabel(days: Set<Int>): String = if (days.size == 7) "Каждый день" else if (days == (1..5).toSet()) "По будням" else days.sorted().joinToString(", ") { listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")[it - 1] }
 
 @Composable fun ModeRow(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
@@ -297,7 +303,7 @@ fun daysLabel(days: Set<Int>): String = if (days.size == 7) "Каждый ден
             Checkbox(t.done, { onToggle() }); Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Text(t.text, style = MaterialTheme.typography.titleMedium, textDecoration = if (t.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
                 if (t.subtasks.isNotEmpty()) Text("${t.subtasks.count { it.done }}/${t.subtasks.size} шагов", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (t.dueDate.isNotEmpty()) Text("До ${t.dueDate}${if (t.reminder) " · напоминания включены" else ""}", style = MaterialTheme.typography.labelSmall, color = if (!t.done && t.dueDate < LocalDate.now().toString()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                if (t.dueDate.isNotEmpty()) Text("${dueLabel(t.dueDate)}${if (t.reminder) " · напоминания включены" else ""}", style = MaterialTheme.typography.labelSmall, color = if (!t.done && t.dueDate < LocalDate.now().toString()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
             if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Rounded.DeleteOutline, "Удалить задачу", Modifier.size(20.dp)) }
         }

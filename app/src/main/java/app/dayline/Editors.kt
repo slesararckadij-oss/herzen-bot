@@ -62,7 +62,7 @@ import java.time.LocalDate
         TextButton(onClick = { onChange(task.copy(subtasks = task.subtasks + CheckItem(text = ""))) }) { Icon(Icons.Rounded.Add, null); Text("Подзадача") }
         HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("Срок выполнения", style = MaterialTheme.typography.titleMedium); Text(task.dueDate.ifBlank { "Без срока" }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Column(Modifier.weight(1f)) { Text("Срок выполнения", style = MaterialTheme.typography.titleMedium); Text(if (task.dueDate.isBlank()) "Без срока" else dueLabel(task.dueDate), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             TextButton(onClick = { val d = runCatching { LocalDate.parse(task.dueDate) }.getOrDefault(LocalDate.now()); DatePickerDialog(context, { _, y, m, day -> onChange(task.copy(dueDate = LocalDate.of(y, m + 1, day).toString())) }, d.year, d.monthValue - 1, d.dayOfMonth).show() }) { Text("Выбрать") }
             if (task.dueDate.isNotEmpty()) IconButton(onClick = { onChange(task.copy(dueDate = "", reminder = false)) }) { Icon(Icons.Rounded.Close, "Убрать срок") }
         }

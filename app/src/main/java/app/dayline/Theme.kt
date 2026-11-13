@@ -34,3 +34,11 @@ import androidx.compose.ui.platform.LocalContext
         }
     }
 }
+
+fun textContrast(foreground: Color, background: Color): Float {
+    val a = foreground.luminance(); val b = background.luminance()
+    return (maxOf(a, b) + 0.05f) / (minOf(a, b) + 0.05f)
+}
+fun legibleText(background: Color, preferred: Color): Color =
+    if (textContrast(preferred, background) >= 4.5f) preferred
+    else if (textContrast(Color.Black, background) >= textContrast(Color.White, background)) Color.Black else Color.White

@@ -17,8 +17,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.dp
     var selected by remember(note.id) { mutableStateOf(note.blocks.firstOrNull()?.id) }
     var menu by remember { mutableStateOf(false) }
     var focusBlock by remember { mutableStateOf<String?>(null) }
+    var focusCursor by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     LaunchedEffect(focusBlock) {
         val index = note.blocks.indexOfFirst { it.id == focusBlock }
@@ -39,12 +44,15 @@ import androidx.compose.ui.unit.dp
     fun add(kind: String) {
         val block = Block(kind = kind, cells = if (kind == "table") List(2) { List(2) { "" } } else emptyList())
         val list = note.blocks.toMutableList(); val at = list.indexOfFirst { it.id == selected }; list.add(if (at < 0) list.size else at + 1, block)
-        selected = block.id; focusBlock = block.id; onChange(note.copy(blocks = list))
+        selected = block.id; focusBlock = block.id; focusCursor = 0; onChange(note.copy(blocks = list))
     }
     val active = note.blocks.firstOrNull { it.id == selected }
-    BackHandler(onBack = onClose)
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    fun finishEditing() { focusManager.clearFocus(force = true); keyboard?.hide(); onClose() }
+    BackHandler(onBack = { finishEditing() })
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Заметка", style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Сохранить и вернуться") } }, actions = { TextButton(onClick = onClose) { Text("Готово") } })
+        TopAppBar(title = { Text("Заметка", style = MaterialTheme.typography.titleMedium) }, navigationIcon = { IconButton(onClick = { finishEditing() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Сохранить и вернуться") } }, actions = { TextButton(onClick = { finishEditing() }) { Text("Готово") } })
     }, bottomBar = {
         Surface(tonalElevation = 3.dp) {
             Column(Modifier.navigationBarsPadding().imePadding()) {
@@ -108,7 +116,13 @@ import androidx.compose.ui.unit.dp
                                     fontStyle = if (b.italic) FontStyle.Italic else FontStyle.Normal,
                                     textDecoration = if (b.checked && b.kind == "check") TextDecoration.LineThrough else null
                                 )
-                                EditorField(b.text, { changeBlock(b.copy(text = it)) }, when (b.kind) { "heading" -> "Заголовок"; "check" -> "Пункт списка"; "bullet" -> "Элемент списка"; else -> if (index == 0) "Начни писать…" else "Текст" }, style, Modifier.weight(1f).focusRequester(focusRequester).padding(vertical = 10.dp).onFocusChanged { if (it.isFocused) selected = b.id })
+                                EditableBlockText(b, { value ->
+                                    val edit = splitListOnEnter(note.blocks, b.id, value.text, value.selection.start)
+                                    if (edit == null) changeBlock(b.copy(text = value.text)) else {
+                                        selected = edit.focusId; focusBlock = edit.focusId; focusCursor = edit.cursor
+                                        onChange(note.copy(blocks = edit.blocks))
+                                    }
+                                }, if (focusBlock == b.id) focusCursor else null, when (b.kind) { "heading" -> "Заголовок"; "check" -> "Пункт списка"; "bullet" -> "Элемент списка"; else -> if (index == 0) "Начни писать…" else "Текст" }, style, Modifier.weight(1f).focusRequester(focusRequester).padding(vertical = 10.dp).onFocusChanged { if (it.isFocused) selected = b.id })
                             }
                         }
                         if (chosen) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
@@ -138,5 +152,16 @@ import androidx.compose.ui.unit.dp
 
 @Composable private fun EditorField(value: String, onChange: (String) -> Unit, placeholder: String, style: TextStyle, modifier: Modifier) {
     val color = MaterialTheme.colorScheme.onSurface
-    BasicTextField(value, onChange, modifier, textStyle = style.copy(color = style.color.takeOrElse { color }), cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { field -> Box { if (value.isEmpty()) Text(placeholder, style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f))); field() } })
+    BasicTextField(value, onChange, modifier, textStyle = style.copy(color = style.color.takeOrElse { color }), cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { field -> Box { if (value.isEmpty()) Text(placeholder, style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f))); field() } })
+}
+
+@Composable private fun EditableBlockText(block: Block, onChange: (TextFieldValue) -> Unit, cursor: Int?, placeholder: String, style: TextStyle, modifier: Modifier) {
+    var value by remember(block.id) { mutableStateOf(TextFieldValue(block.text, TextRange(cursor?.coerceIn(0, block.text.length) ?: block.text.length))) }
+    LaunchedEffect(block.text) {
+        if (value.text != block.text) value = TextFieldValue(block.text, TextRange(value.selection.start.coerceIn(0, block.text.length)))
+    }
+    LaunchedEffect(cursor) { if (cursor != null) value = value.copy(selection = TextRange(cursor.coerceIn(0, value.text.length)), composition = null) }
+    BasicTextField(value, { next -> value = next; onChange(next) }, modifier, textStyle = style, cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { field ->
+        Box { if (value.text.isEmpty()) Text(placeholder, style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)); field() }
+    })
 }

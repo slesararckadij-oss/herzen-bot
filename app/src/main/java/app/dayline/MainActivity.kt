@@ -39,6 +39,7 @@ class DayModel(app: Application) : AndroidViewModel(app) {
     var state by mutableStateOf(store.read()); private set
     var tab by mutableIntStateOf(0)
     var noteDraft by mutableStateOf<Note?>(null)
+    var viewedNoteId by mutableStateOf<String?>(null)
     var taskDraft by mutableStateOf<Task?>(null)
     var habitDraft by mutableStateOf<Habit?>(null)
     var alarmDraft by mutableStateOf<WakeAlarm?>(null)
@@ -48,6 +49,7 @@ class DayModel(app: Application) : AndroidViewModel(app) {
     var reward by mutableStateOf<Pair<String, Int>?>(null)
     fun update(change: (DayState) -> DayState) { error = null; try { state = store.update(change) } catch (e: Exception) { error = e.message ?: "Не удалось сохранить данные" } }
     fun reload() { try { state = store.read() } catch (_: Exception) { error = "Не удалось прочитать данные. Не удаляйте приложение." } }
+    fun openNote(n: Note) { viewedNoteId = n.id }
     fun editNote(n: Note = Note()) { noteDraft = n.copy(blocks = n.content()) }
     fun persistDraft() {
         val n = noteDraft ?: return
@@ -112,7 +114,14 @@ class MainActivity : ComponentActivity() {
     val note = vm.noteDraft
     if (note != null) {
         LaunchedEffect(note) { delay(700); vm.persistDraft() }
-        NoteEditor(note, s.layout, { vm.noteDraft = it }, { mode -> vm.update { it.copy(layout = mode) } }, { vm.persistDraft(); if (vm.error == null) vm.noteDraft = null })
+        NoteEditor(note, s.layout, { vm.noteDraft = it }, { mode -> vm.update { it.copy(layout = mode) } }, { vm.persistDraft(); if (vm.error == null) { vm.viewedNoteId = note.id.takeIf { id -> vm.state.notes.any { it.id == id } }; vm.noteDraft = null } })
+        return
+    }
+    val viewedNote = s.notes.firstOrNull { it.id == vm.viewedNoteId }
+    if (viewedNote != null) {
+        NoteReader(viewedNote, { vm.viewedNoteId = null }, { vm.editNote(viewedNote) }) { id, checked ->
+            vm.update { old -> old.copy(notes = old.notes.map { n -> if (n.id == viewedNote.id) n.copy(blocks = n.content().map { b -> if (b.id == id) b.copy(checked = checked) else b }, updated = System.currentTimeMillis()) else n }) }
+        }
         return
     }
     vm.taskDraft?.let { t -> TaskEditor(t, { vm.taskDraft = it }, { vm.taskDraft = null }, {
@@ -138,7 +147,7 @@ class MainActivity : ComponentActivity() {
     }, bottomBar = {
         NavigationBar { names.forEachIndexed { index, label -> NavigationBarItem(selected = vm.tab == index, onClick = { vm.tab = index }, icon = { Icon(icons[index], label) }, label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) }) } }
     }, floatingActionButton = {
-        if (vm.tab in 1..3) ExtendedFloatingActionButton(onClick = {
+        if (vm.tab in 1..3 && !(vm.tab == 1 && taskPage == 2)) ExtendedFloatingActionButton(onClick = {
             when (vm.tab) {
                 1 -> if (taskPage == 1) vm.habitDraft = Habit(title = "") else vm.taskDraft = Task(text = "")
                 2 -> vm.editNote()
@@ -161,7 +170,7 @@ class MainActivity : ComponentActivity() {
                     val habits = s.habits.filter { today.dayOfWeek.value in it.days }
                     if (habits.isNotEmpty()) {
                         item { SectionHeader("Маленькие победы", "Твои привычки на сегодня") }
-                        items(habits, key = { "home-${it.id}" }) { h -> HabitCard(h, { toggleHabit(vm, h) }, { vm.tab = 1; taskPage = 1 }, null) }
+                        items(habits, key = { "home-${it.id}" }) { h -> HabitCard(h, { toggleHabit(vm, h) }, { vm.tab = 1; taskPage = 1 }, null, { vm.tab = 1; taskPage = 2 }) }
                     }
                     val tasks = s.tasks.filter { !it.done }.sortedBy { it.dueDate.ifEmpty { "9999" } }.take(3)
                     if (tasks.isNotEmpty()) {
@@ -171,17 +180,27 @@ class MainActivity : ComponentActivity() {
                     item { OutlinedButton(onClick = { val manager = AppWidgetManager.getInstance(context); if (Build.VERSION.SDK_INT >= 26 && manager.isRequestPinAppWidgetSupported) manager.requestPinAppWidget(ComponentName(context, MorningWidget::class.java), null, null) else vm.error = "Добавьте виджет Dayline через меню рабочего стола телефона." }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Rounded.Widgets, null); Spacer(Modifier.width(8.dp)); Text("Добавить виджет на рабочий стол") } }
                 }
                 1 -> {
-                    item { ModeRow(listOf("Задачи", "Привычки"), taskPage) { taskPage = it } }
+                    item { ModeRow(listOf("Задачи", "Привычки", "Медали"), taskPage) { taskPage = it } }
                     if (taskPage == 0) {
                         val active = s.tasks.filterNot { it.done }.sortedBy { it.dueDate.ifEmpty { "9999" } }
                         if (s.tasks.isEmpty()) item { EmptyCard("Освободи голову", "Запиши дело, добавь шаги и срок. Мы напомним заранее.", Icons.Rounded.CheckCircleOutline) }
                         items(active, key = { it.id }) { t -> TaskCard(t, { toggleTask(vm, t, context) }, { vm.taskDraft = t }, { Alarms.removeTask(context, t); vm.update { it.copy(tasks = it.tasks.filterNot { x -> x.id == t.id }) } }) }
                         if (s.tasks.any { it.done }) item { SectionHeader("Готово · ${s.tasks.count { it.done }}") }
                         items(s.tasks.filter { it.done }, key = { it.id }) { t -> TaskCard(t, { toggleTask(vm, t, context) }, { vm.taskDraft = t }, { Alarms.removeTask(context, t); vm.update { it.copy(tasks = it.tasks.filterNot { x -> x.id == t.id }) } }) }
-                    } else {
-                        item { Surface(color = colors.tertiaryContainer, shape = MaterialTheme.shapes.extraLarge) { Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Каждый день — маленькая победа", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text("${s.habits.sumOf { it.completed.size }} выполнений · ${s.habits.sumOf { medals(it).size }} медалей", color = colors.onTertiaryContainer) } } }
+                    } else if (taskPage == 1) {
+                        item { Surface(color = colors.tertiaryContainer, contentColor = legibleText(colors.tertiaryContainer, colors.onTertiaryContainer), shape = MaterialTheme.shapes.extraLarge) { Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Каждый день — маленькая победа", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold); Text("Выполнено: ${s.habits.sumOf { it.completed.size }} · Медалей: ${s.awards.size}", color = legibleText(colors.tertiaryContainer, colors.onTertiaryContainer)) } } }
                         if (s.habits.isEmpty()) item { EmptyCard("С чего начнём?", "Вода, чтение или спорт — выбери свою привычку и дни недели.", Icons.Rounded.EmojiEvents) }
-                        items(s.habits, key = { it.id }) { h -> HabitCard(h, { toggleHabit(vm, h) }, { vm.habitDraft = h }, { deleteHabit = h }) }
+                        items(s.habits, key = { it.id }) { h -> HabitCard(h, { toggleHabit(vm, h) }, { vm.habitDraft = h }, { deleteHabit = h }, { taskPage = 2 }) }
+                    } else {
+                        item { SectionHeader("Моя коллекция", "Медали за твои достижения · всего ${s.awards.size}") }
+                        if (s.awards.isEmpty()) item { EmptyCard("Первая медаль уже близко", "Отметь выполненную привычку. Здесь будут собраны твои награды.", Icons.Rounded.EmojiEvents) }
+                        items(s.awards.sortedWith(compareByDescending<Medal> { it.earnedOn }.thenByDescending { it.target }), key = { it.id }) { medal -> MedalCard(medal) }
+                        item { Text("Полученные медали остаются в коллекции при перерыве, отмене отметки и удалении привычки.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
+                        if (s.habits.isNotEmpty()) item { SectionHeader("Впереди новые победы") }
+                        items(s.habits.filter { h -> listOf(1, 7, 30, 100).any { target -> s.awards.none { it.habitId == h.id && it.target == target } } }, key = { "next-${it.id}" }) { h ->
+                            val target = listOf(1, 7, 30, 100).first { count -> s.awards.none { it.habitId == h.id && it.target == count } }
+                            Card { Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(h.title, style = MaterialTheme.typography.titleMedium); Text("${medalTitle(target)} · ${h.completed.size}/$target выполнений", style = MaterialTheme.typography.bodySmall); LinearProgressIndicator(progress = { (h.completed.size.toFloat() / target).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth()) } }
+                        }
                     }
                 }
                 2 -> {
@@ -195,12 +214,12 @@ class MainActivity : ComponentActivity() {
                         items(notes.chunked(2), key = { it.first().id }) { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 row.forEach { n ->
-                                    Box(Modifier.weight(1f)) { NoteCard(n, true, { vm.editNote(n) }, { deleteNote = n }) }
+                                    Box(Modifier.weight(1f)) { NoteCard(n, true, { vm.openNote(n) }, { deleteNote = n }) }
                                 }
                                 if (row.size == 1) Spacer(Modifier.weight(1f))
                             }
                         }
-                    } else items(notes, key = { it.id }) { n -> NoteCard(n, false, { vm.editNote(n) }, { deleteNote = n }) }
+                    } else items(notes, key = { it.id }) { n -> NoteCard(n, false, { vm.openNote(n) }, { deleteNote = n }) }
                 }
                 3 -> {
                     item { Text("Просыпайся в своём ритме", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) }
@@ -252,7 +271,7 @@ class MainActivity : ComponentActivity() {
         Text("Тема", style = MaterialTheme.typography.labelLarge); ModeRow(listOf("Системная", "Светлая", "Тёмная"), listOf("system", "light", "dark").indexOf(s.theme).coerceAtLeast(0)) { index -> vm.update { it.copy(theme = listOf("system", "light", "dark")[index]) } }
         Text("Оформление заметок", style = MaterialTheme.typography.labelLarge); ModeRow(listOf("Простой", "Блоки"), if (s.layout == "blocks") 1 else 0) { index -> vm.update { it.copy(layout = if (index == 1) "blocks" else "simple") } }
         Text("Оба режима открывают одни и те же заметки. Текст, таблицы и списки сохраняются при переключении.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-        Text("Dayline 0.2 · Всё личное хранится на телефоне", style = MaterialTheme.typography.labelSmall)
+        Text("Dayline 0.3 · Всё личное хранится на телефоне", style = MaterialTheme.typography.labelSmall)
     } }
     if (digestTime) PickTime(s.digestHour, s.digestMinute, { digestTime = false }) { h, m -> vm.update { it.copy(digestHour = h, digestMinute = m) }; Alarms.digest(context, vm.state); digestTime = false }
     if (permissionMessage) ExactPermission({ permissionMessage = false }) { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))); permissionMessage = false }
@@ -268,7 +287,7 @@ private fun toggleHabit(vm: DayModel, h: Habit) {
     vm.update { old -> old.copy(habits = old.habits.map { current ->
         if (current.id != h.id) current else {
             val next = current.copy(completed = if (today in current.completed) current.completed - today else current.completed + today)
-            earned = (medals(next) - medals(current).toSet()).maxOrNull()
+            earned = medals(next).filter { count -> old.awards.none { it.habitId == h.id && it.target == count } }.maxOrNull()
             next
         }
     }) }
@@ -309,27 +328,53 @@ fun daysLabel(days: Set<Int>): String = if (days.size == 7) "Каждый ден
         }
     }
 }
-@Composable fun HabitCard(h: Habit, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: (() -> Unit)?) {
-    val today = LocalDate.now(); val done = today.toString() in h.completed; val scheduled = today.dayOfWeek.value in h.days
-    Card(onClick = onEdit, shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = if (done) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(h.emoji, style = MaterialTheme.typography.headlineMedium); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(h.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text("${habitStreak(h)} в серии · ${h.completed.size} всего", style = MaterialTheme.typography.labelMedium) }; Checkbox(done, { onToggle() }, enabled = scheduled || done) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                (6 downTo 0).forEach { back -> val day = today.minusDays(back.toLong()); val hit = day.toString() in h.completed; Surface(shape = RoundedCornerShape(12.dp), color = if (hit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.size(32.dp)) { Box(contentAlignment = Alignment.Center) { Text(if (hit) "✓" else day.dayOfMonth.toString(), color = if (hit) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium) } } }
+@Composable fun HabitCard(h: Habit, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: (() -> Unit)?, onMedals: (() -> Unit)? = null) {
+    val colors = MaterialTheme.colorScheme
+    val today = LocalDate.now()
+    val done = today.toString() in h.completed
+    val scheduled = today.dayOfWeek.value in h.days
+    Card(onClick = onEdit, shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow, contentColor = legibleText(colors.surfaceContainerLow, colors.onSurface))) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(h.emoji, style = MaterialTheme.typography.headlineMedium)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(h.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Серия: ${habitStreak(h)} · Всего: ${h.completed.size}", style = MaterialTheme.typography.labelMedium, color = legibleText(colors.surfaceContainerLow, colors.onSurfaceVariant))
+                }
+                Checkbox(done, { onToggle() }, enabled = scheduled || done)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                listOf(1, 7, 30, 100).forEach { count ->
-                    val earned = count in medals(h)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(shape = CircleShape, color = if (earned) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest, border = BorderStroke(1.dp, if (earned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
-                            Icon(if (earned) Icons.Rounded.EmojiEvents else Icons.Rounded.Lock, if (earned) "Медаль за $count выполнений получена" else "Медаль за $count выполнений", Modifier.padding(10.dp).size(24.dp), tint = if (earned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-                        }
-                        Text("$count", style = MaterialTheme.typography.labelSmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                (6 downTo 0).forEach { back ->
+                    val day = today.minusDays(back.toLong())
+                    val hit = day.toString() in h.completed
+                    val background = if (hit) colors.primaryContainer else colors.surfaceContainerHighest
+                    val foreground = legibleText(background, if (hit) colors.onPrimaryContainer else colors.onSurfaceVariant)
+                    Surface(shape = RoundedCornerShape(12.dp), color = background, contentColor = foreground, modifier = Modifier.size(34.dp)) {
+                        Box(contentAlignment = Alignment.Center) { Text(if (hit) "✓" else day.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium) }
                     }
                 }
+            }
+            Text(if (scheduled) "Сегодня по плану · ${daysLabel(h.days)}" else "Сегодня выходной · ${daysLabel(h.days)}", style = MaterialTheme.typography.labelSmall, color = legibleText(colors.surfaceContainerLow, colors.onSurfaceVariant))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (onMedals != null) TextButton(onClick = onMedals) { Icon(Icons.Rounded.EmojiEvents, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Мои медали") }
+                Spacer(Modifier.weight(1f))
                 if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Rounded.DeleteOutline, "Удалить привычку") }
             }
-            Text(if (scheduled) "Сегодня по плану · ${daysLabel(h.days)}" else "Сегодня выходной · ${daysLabel(h.days)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+@Composable fun MedalCard(medal: Medal) {
+    val colors = MaterialTheme.colorScheme
+    val background = colors.primaryContainer
+    val foreground = legibleText(background, colors.onPrimaryContainer)
+    Card(shape = MaterialTheme.shapes.extraLarge, colors = CardDefaults.cardColors(containerColor = background, contentColor = foreground)) {
+        Row(Modifier.fillMaxWidth().padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = colors.surface, contentColor = legibleText(colors.surface, colors.onSurface)) { Icon(Icons.Rounded.EmojiEvents, null, Modifier.padding(18.dp).size(36.dp)) }
+            Column(Modifier.weight(1f).padding(start = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(medalTitle(medal.target), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(medal.habitTitle, style = MaterialTheme.typography.bodyMedium)
+                Text("Выполнено: ${medal.target} · ${medal.earnedOn}", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

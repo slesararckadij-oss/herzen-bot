@@ -1,0 +1,5 @@
+Dayline Android 0.2.0 debug APK
+Source: branch dayline-android-v0.2, commit 6416b129792c1ccfaa3303f270f1db5fed01c467
+Install over 0.1 without uninstalling. Same package and signing certificate.
+18 JUnit tests passed; Android lint has no errors.
+OpenRouter deferred. News ranking is heuristic; RSS connectivity depends on device network.
